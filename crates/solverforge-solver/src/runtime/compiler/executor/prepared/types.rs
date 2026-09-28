@@ -163,12 +163,13 @@ where
         Ok(unassigned)
     }
 
-    pub(crate) fn current_list_unassigned_count(
+    /// Returns `(unassigned, declared)` element counts for one list slot.
+    pub(crate) fn current_list_assignment_counts(
         &mut self,
         phase_index: usize,
         slot: &CompiledListSlot<S, V, DM, IDM>,
         solution: &S,
-    ) -> Result<usize, RuntimeInstantiationError> {
+    ) -> Result<(usize, usize), RuntimeInstantiationError> {
         let target = slot.identity();
         let catalog_index =
             self.list_source_catalog
@@ -177,8 +178,14 @@ where
                     phase_index,
                     kind: super::RuntimeInstantiationErrorKind::MissingRegisteredSource { target },
                 })?;
-        self.current_list_source_work(PreparedListSlot::new(phase_index, catalog_index), solution)
-            .map(|unassigned| unassigned.len())
+        let unassigned = self
+            .current_list_source_work(PreparedListSlot::new(phase_index, catalog_index), solution)?
+            .len();
+        let declared = self.list_source_indices[catalog_index]
+            .as_ref()
+            .expect("current list source work binds its declaration index")
+            .source_count();
+        Ok((unassigned, declared))
     }
 
     /// Borrows an already-bound source without a map lookup or rebinding.

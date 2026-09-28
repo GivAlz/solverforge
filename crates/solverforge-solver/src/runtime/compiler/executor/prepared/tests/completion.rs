@@ -58,3 +58,74 @@ fn cancellation_retains_complete_working_solution_over_better_incomplete_best() 
     );
     assert_eq!(best_solution_events.load(Ordering::SeqCst), 0);
 }
+
+thread_local! {
+    static PANICS_ON_THIS_THREAD: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Counts panics raised on the calling thread while delegating reporting to
+/// the previously installed hook, so concurrent tests keep their output.
+fn install_thread_panic_counter() {
+    static INSTALL: std::sync::Once = std::sync::Once::new();
+    INSTALL.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            PANICS_ON_THIS_THREAD.with(|count| count.set(count.get() + 1));
+            previous(info);
+        }));
+    });
+}
+
+fn panics_on_this_thread() -> usize {
+    PANICS_ON_THIS_THREAD.with(std::cell::Cell::get)
+}
+
+#[test]
+fn configured_termination_during_construction_fails_without_unwinding() {
+    let _guard = TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    install_thread_panic_counter();
+    let panics_before = panics_on_this_thread();
+    let config = SolverConfig {
+        termination: Some(TerminationConfig {
+            step_count_limit: Some(3),
+            ..TerminationConfig::default()
+        }),
+        phases: vec![
+            construction(ConstructionHeuristicType::ListRoundRobin),
+            PhaseConfig::LocalSearch(Default::default()),
+        ],
+        ..SolverConfig::default()
+    };
+
+    let result = crate::try_run_solver_with_config_and_search(
+        plan((1..=8).collect(), vec![Vec::new(), Vec::new()]),
+        (),
+        descriptor(),
+        |plan, _| entity_count(plan),
+        crate::SolverRuntime::detached(),
+        config,
+        30,
+        |_| {},
+        None,
+        |config, descriptor| {
+            Ok(SearchContext::try_new(descriptor, model(), config.random_seed)?.defaults())
+        },
+    );
+
+    let error = result.expect_err("construction cut by the step limit must fail");
+    assert!(matches!(error, RuntimeBuildError::Execution { .. }));
+    let message = error.to_string();
+    assert!(
+        message.contains("configured solve stopped with mandatory planning work incomplete"),
+        "{message}"
+    );
+    assert!(message.contains("5 unassigned element(s)"), "{message}");
+    assert!(message.contains("3 of 8 assigned"), "{message}");
+    assert_eq!(
+        panics_on_this_thread(),
+        panics_before,
+        "a configured-termination failure is a normal lifecycle outcome, not a panic"
+    );
+}

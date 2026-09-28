@@ -176,11 +176,13 @@ where
     IDM: Clone + Send + Sync + Debug + CrossEntityDistanceMeter<S>,
 {
     for slot in &bindings.list_slots {
-        let unassigned = execution.current_list_unassigned_count(phase_index, slot, solution)?;
+        let (unassigned, declared) =
+            execution.current_list_assignment_counts(phase_index, slot, solution)?;
         if unassigned > 0 {
             return Ok(Some(format!(
-                "list variable {} has {unassigned} unassigned element(s)",
-                slot.identity()
+                "list variable {} has {unassigned} unassigned element(s); {} of {declared} assigned",
+                slot.identity(),
+                declared - unassigned
             )));
         }
     }
@@ -191,9 +193,13 @@ where
         };
         let remaining = assignment.remaining_required_count(solution);
         if remaining > 0 {
+            let required = (0..assignment.entity_count(solution))
+                .filter(|entity_index| assignment.is_required(solution, *entity_index))
+                .count() as u64;
             return Ok(Some(format!(
-                "assignment group {} has {remaining} unassigned required entity row(s)",
-                binding.group.group_name
+                "assignment group {} has {remaining} unassigned required entity row(s); {} of {required} assigned",
+                binding.group.group_name,
+                required - remaining
             )));
         }
     }
@@ -202,7 +208,8 @@ where
         if binding.assignment_owned || binding.slot.allows_unassigned() {
             continue;
         }
-        let unassigned = (0..binding.slot.entity_count(solution))
+        let rows = binding.slot.entity_count(solution);
+        let unassigned = (0..rows)
             .filter(|entity_index| {
                 binding
                     .slot
@@ -212,8 +219,9 @@ where
             .count();
         if unassigned > 0 {
             return Ok(Some(format!(
-                "scalar variable {} has {unassigned} unassigned entity row(s)",
-                binding.slot.id()
+                "scalar variable {} has {unassigned} unassigned entity row(s); {} of {rows} assigned",
+                binding.slot.id(),
+                rows - unassigned
             )));
         }
     }
@@ -346,7 +354,7 @@ mod tests {
         )
         .expect("one required scalar row is unassigned");
 
-        assert!(unresolved.contains("1 unassigned entity row(s)"));
+        assert!(unresolved.contains("1 unassigned entity row(s); 1 of 2 assigned"));
     }
 
     #[test]
@@ -393,7 +401,7 @@ mod tests {
 
         let message = unresolved(model.clone(), descriptor(true), &incomplete)
             .expect("required assignment row is incomplete");
-        assert!(message.contains("1 unassigned required entity row(s)"));
+        assert!(message.contains("1 unassigned required entity row(s); 0 of 1 assigned"));
         assert!(unresolved(model, descriptor(true), &complete).is_none());
     }
 }

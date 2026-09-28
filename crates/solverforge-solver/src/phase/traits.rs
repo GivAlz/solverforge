@@ -76,3 +76,33 @@ impl<S: PlanningSolution, D: Director<S>, BestCb: ProgressCallback<S>> Phase<S, 
         )
     }
 }
+
+// A mutably borrowed phase runs in place, so its owner can inspect the phase
+// after the solver that drove it has returned.
+impl<S, D, BestCb, P> Phase<S, D, BestCb> for &mut P
+where
+    S: PlanningSolution,
+    D: Director<S>,
+    BestCb: ProgressCallback<S>,
+    P: Phase<S, D, BestCb> + ?Sized,
+{
+    fn solve(&mut self, solver_scope: &mut SolverScope<'_, S, D, BestCb>) {
+        (**self).solve(solver_scope);
+    }
+
+    fn phase_type_name(&self) -> &'static str {
+        (**self).phase_type_name()
+    }
+
+    fn defers_initial_best_solution_publication(&self) -> bool {
+        (**self).defers_initial_best_solution_publication()
+    }
+
+    fn on_solver_terminal(&mut self, solver_scope: &mut SolverScope<'_, S, D, BestCb>) {
+        (**self).on_solver_terminal(solver_scope);
+    }
+
+    fn candidate_trace_plan(&self) -> CandidateTracePhasePlan {
+        (**self).candidate_trace_plan()
+    }
+}

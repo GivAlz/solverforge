@@ -1,22 +1,58 @@
-use std::any::Any;
+use std::fmt::Debug;
 
+use solverforge_core::domain::PlanningSolution;
+use solverforge_core::score::Score;
+use solverforge_scoring::Director;
+
+use crate::heuristic::selector::nearby_list_change::CrossEntityDistanceMeter;
 use crate::runtime_build_error::RuntimeBuildError;
+use crate::scope::{ProgressCallback, SolverScope};
 
 use super::super::{RuntimeInstantiationError, RuntimeInstantiationErrorKind};
+use super::CompiledRuntimePhaseRunner;
 
-/// Typed transport for a reached compiled-runtime execution failure. The
-/// configured entrypoint catches only this payload and resumes foreign panics.
-#[derive(Debug)]
-struct RuntimeExecutionFailure {
-    error: RuntimeBuildError,
+/// A top-level phase that records a reached execution failure instead of
+/// unwinding. The configured entrypoint takes it after the solver returns and
+/// reports it through the `Failed` lifecycle.
+pub(crate) trait ExecutionFailureSource {
+    fn take_execution_failure(&mut self) -> Option<RuntimeBuildError>;
 }
 
-pub(crate) fn take_runtime_execution_failure(
-    payload: Box<dyn Any + Send>,
-) -> Result<RuntimeBuildError, Box<dyn Any + Send>> {
-    payload
-        .downcast::<RuntimeExecutionFailure>()
-        .map(|failure| failure.error)
+impl<S, V, DM, IDM, Extension> ExecutionFailureSource
+    for CompiledRuntimePhaseRunner<S, V, DM, IDM, Extension>
+where
+    S: PlanningSolution + Clone + Send + Sync + 'static,
+    S::Score: Score,
+    V: Clone + PartialEq + Send + Sync + Debug + 'static,
+    DM: Clone + Send + Sync + Debug + CrossEntityDistanceMeter<S> + 'static,
+    IDM: Clone + Send + Sync + Debug + CrossEntityDistanceMeter<S> + 'static,
+{
+    fn take_execution_failure(&mut self) -> Option<RuntimeBuildError> {
+        self.failure.take()
+    }
+}
+
+impl<S, V, DM, IDM, Extension> CompiledRuntimePhaseRunner<S, V, DM, IDM, Extension>
+where
+    S: PlanningSolution + Clone + Send + Sync + 'static,
+    S::Score: Score,
+    V: Clone + PartialEq + Send + Sync + Debug + 'static,
+    DM: Clone + Send + Sync + Debug + CrossEntityDistanceMeter<S> + 'static,
+    IDM: Clone + Send + Sync + Debug + CrossEntityDistanceMeter<S> + 'static,
+{
+    /// Ends the solve as `Failed` and retains the error for the entrypoint.
+    /// No best solution is published after this point.
+    pub(super) fn record_failure<D, ProgressCb>(
+        &mut self,
+        error: RuntimeBuildError,
+        solver_scope: &mut SolverScope<'_, S, D, ProgressCb>,
+    ) where
+        D: Director<S>,
+        ProgressCb: ProgressCallback<S>,
+    {
+        solver_scope.mark_failed();
+        self.failure = Some(error);
+    }
 }
 
 pub(super) fn map_preparation_error(error: RuntimeInstantiationError) -> RuntimeBuildError {
@@ -33,13 +69,9 @@ pub(super) fn map_preparation_error(error: RuntimeInstantiationError) -> Runtime
     }
 }
 
-pub(super) fn panic_execution_error(error: RuntimeInstantiationError) -> ! {
-    panic_runtime_execution_error(RuntimeBuildError::Execution {
+pub(super) fn execution_error(error: RuntimeInstantiationError) -> RuntimeBuildError {
+    RuntimeBuildError::Execution {
         phase_index: error.phase_index,
         message: error.to_string(),
-    })
-}
-
-pub(super) fn panic_runtime_execution_error(error: RuntimeBuildError) -> ! {
-    std::panic::panic_any(RuntimeExecutionFailure { error })
+    }
 }

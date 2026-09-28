@@ -27,6 +27,8 @@ pub(super) fn generate_solvable_solution(
                         ::solverforge::QualifiedCandidateTraceRunProvenance,
                     >,
                 ) {
+                    // The runtime has already emitted the terminal lifecycle
+                    // event, including `Failed` with the error message.
                     let _ = #solution_name::solve_internal(
                         self,
                         runtime,
