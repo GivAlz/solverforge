@@ -1,5 +1,6 @@
 //! One streamed cursor for every compiled runtime list neighborhood.
 
+mod entities;
 mod probe;
 mod slot;
 
@@ -19,6 +20,7 @@ use crate::heuristic::selector::move_selector::{
 };
 use crate::heuristic::selector::nearby_list_change::CrossEntityDistanceMeter;
 use crate::heuristic::selector::seed::scoped_seed;
+use crate::pinning::PinnedEntities;
 
 use self::slot::{open_slot_cursor, RuntimeListSlotCursor};
 use super::spec::{RuntimeListNeighborhoodPlan, RuntimeListNeighborhoodSpec};
@@ -76,6 +78,7 @@ where
             .cloned()
             .enumerate()
             .map(|(slot_index, slot)| {
+                let pins = PinnedEntities::capture(score_director, slot.descriptor_index());
                 open_slot_cursor(
                     self.plan.spec,
                     slot,
@@ -83,6 +86,7 @@ where
                     context,
                     &self.plan.kopt_patterns,
                     ruin_seeds.get(slot_index).copied(),
+                    &pins,
                 )
             })
             .collect::<Vec<_>>();
@@ -213,7 +217,11 @@ where
                 .plan
                 .slots
                 .iter()
-                .filter(|slot| slot.entity_count(score_director.working_solution()) > 0)
+                .filter(|slot| {
+                    PinnedEntities::capture(score_director, slot.descriptor_index())
+                        .unpinned_count(slot.entity_count(score_director.working_solution()))
+                        > 0
+                })
                 .count()
                 .saturating_mul(moves_per_step),
             _ => self.open_cursor(score_director).count(),

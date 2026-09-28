@@ -5,6 +5,8 @@ use std::fmt::Debug;
 use solverforge_core::domain::PlanningSolution;
 use solverforge_scoring::Director;
 
+use crate::pinning::{unpinned_indices, PinnedEntities};
+
 // A reference to an entity within a solution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EntityReference {
@@ -26,7 +28,9 @@ impl EntityReference {
 /// Trait for selecting entities from a planning solution.
 ///
 /// Entity selectors provide an iteration order over the entities that
-/// the solver will consider for moves.
+/// the solver will consider for moves. The stock selectors skip entities
+/// that are pinned when the iteration starts, so moves are never generated
+/// for them.
 ///
 /// # Type Parameters
 /// * `S` - The planning solution type
@@ -49,7 +53,8 @@ pub trait EntitySelector<S: PlanningSolution>: Send + Debug {
     }
 }
 
-// An entity selector that iterates over all entities from the solution.
+// An entity selector that iterates over all unpinned entities of one
+// descriptor, in index order.
 #[derive(Clone, Debug)]
 pub struct FromSolutionEntitySelector {
     // The descriptor index to select from.
@@ -71,17 +76,20 @@ impl<S: PlanningSolution> EntitySelector<S> for FromSolutionEntitySelector {
             .entity_count(self.descriptor_index)
             .unwrap_or(0);
         let desc_idx = self.descriptor_index;
-        (0..count).map(move |i| EntityReference::new(desc_idx, i))
+        unpinned_indices(&PinnedEntities::capture(score_director, desc_idx), count)
+            .map(move |i| EntityReference::new(desc_idx, i))
     }
 
     fn size<D: Director<S>>(&self, score_director: &D) -> usize {
-        score_director
+        let count = score_director
             .entity_count(self.descriptor_index)
-            .unwrap_or(0)
+            .unwrap_or(0);
+        PinnedEntities::capture(score_director, self.descriptor_index).unpinned_count(count)
     }
 }
 
-// An entity selector that iterates over all entities from all descriptors.
+// An entity selector that iterates over all unpinned entities from all
+// descriptors.
 #[derive(Debug, Clone, Default)]
 pub struct AllEntitiesSelector;
 
@@ -102,16 +110,31 @@ impl<S: PlanningSolution> EntitySelector<S> for AllEntitiesSelector {
         let mut refs = Vec::new();
         for desc_idx in 0..descriptor_count {
             let count = score_director.entity_count(desc_idx).unwrap_or(0);
-            for entity_idx in 0..count {
-                refs.push(EntityReference::new(desc_idx, entity_idx));
-            }
+            let pins = PinnedEntities::capture(score_director, desc_idx);
+            refs.extend(
+                unpinned_indices(&pins, count)
+                    .map(|entity_idx| EntityReference::new(desc_idx, entity_idx)),
+            );
         }
 
         refs.into_iter()
     }
 
     fn size<D: Director<S>>(&self, score_director: &D) -> usize {
-        score_director.total_entity_count().unwrap_or(0)
+        let descriptor_count = score_director
+            .solution_descriptor()
+            .entity_descriptors
+            .len();
+        let pinned: usize = (0..descriptor_count)
+            .map(|desc_idx| {
+                let count = score_director.entity_count(desc_idx).unwrap_or(0);
+                count - PinnedEntities::capture(score_director, desc_idx).unpinned_count(count)
+            })
+            .sum();
+        score_director
+            .total_entity_count()
+            .unwrap_or(0)
+            .saturating_sub(pinned)
     }
 }
 

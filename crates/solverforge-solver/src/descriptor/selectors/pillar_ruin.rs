@@ -227,8 +227,10 @@ where
         let count = score_director
             .entity_count(self.binding.descriptor_index)
             .unwrap_or(0);
+        let pins = PinnedEntities::capture(score_director, self.binding.descriptor_index);
         let inputs = collect_pillar_groups(
-            (0..count).map(|entity_index| {
+            unpinned_indices(&pins, count)
+                .map(|entity_index| {
                 (
                     EntityReference::new(self.binding.descriptor_index, entity_index),
                     (self.binding.getter)(self.binding.entity_for_index(
@@ -315,8 +317,10 @@ where
         let count = score_director
             .entity_count(binding.descriptor_index)
             .unwrap_or(0);
+        let pins = PinnedEntities::capture(score_director, binding.descriptor_index);
         let pillars = collect_pillar_groups(
-            (0..count).map(|entity_index| {
+            unpinned_indices(&pins, count)
+                .map(|entity_index| {
                 (
                     EntityReference::new(binding.descriptor_index, entity_index),
                     (binding.getter)(binding.entity_for_index(&descriptor, solution, entity_index)),
@@ -407,7 +411,8 @@ where
             .unwrap_or(0);
         let descriptor = self.solution_descriptor.clone();
         let binding = self.binding.clone();
-        let assigned_indices: Vec<usize> = (0..count)
+        let pins = PinnedEntities::capture(score_director, binding.descriptor_index);
+        let assigned_indices: Vec<usize> = unpinned_indices(&pins, count)
             .filter(|&entity_index| {
                 let entity = descriptor
                     .get_entity(solution, binding.descriptor_index, entity_index)
@@ -467,7 +472,9 @@ where
         let count = score_director
             .entity_count(self.binding.descriptor_index)
             .unwrap_or(0);
-        if count == 0 {
+        let free = PinnedEntities::capture(score_director, self.binding.descriptor_index)
+            .unpinned_count(count);
+        if free == 0 {
             0
         } else {
             self.moves_per_step

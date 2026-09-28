@@ -4,24 +4,33 @@ use solverforge_config::RecreateHeuristicType;
 use solverforge_core::domain::PlanningSolution;
 
 use crate::builder::RuntimeScalarSlot;
+use crate::pinning::PinnedEntities;
 
 use super::super::spec::RuntimeScalarRecipe;
 
 /// Generates the exact finite batch shape of the established scalar
 /// ruin/recreate selector. The caller owns the one mutable leaf stream state;
 /// this function only consumes it while creating cursor-owned batches.
+///
+/// Subsets are drawn from the free entities only, in canonical index order,
+/// so pinned entities are never ruined.
 pub(super) fn generate_ruin_batches<S>(
     solution: &S,
     slot: &RuntimeScalarSlot<S>,
     min_ruin_count: usize,
     max_ruin_count: usize,
     moves_per_step: usize,
+    pins: &PinnedEntities,
     rng: &mut SmallRng,
 ) -> Vec<Vec<usize>>
 where
     S: PlanningSolution,
 {
-    let entity_count = slot.entity_count(solution);
+    // `free` is `None` when nothing is pinned, so the reset below stays the
+    // plain index fill.
+    let total_entities = slot.entity_count(solution);
+    let free = pins.free_list(total_entities);
+    let entity_count = free.as_ref().map_or(total_entities, Vec::len);
     let min = min_ruin_count.min(entity_count);
     let max = max_ruin_count.min(entity_count);
     let mut permutation: Vec<usize> = (0..entity_count).collect();
@@ -30,8 +39,13 @@ where
             if entity_count == 0 {
                 return Vec::new();
             }
-            for (index, entity) in permutation.iter_mut().enumerate() {
-                *entity = index;
+            match &free {
+                None => {
+                    for (index, entity) in permutation.iter_mut().enumerate() {
+                        *entity = index;
+                    }
+                }
+                Some(free) => permutation.copy_from_slice(free),
             }
             let ruin_count = if min == max {
                 min

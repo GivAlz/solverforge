@@ -25,6 +25,7 @@ use crate::heuristic::selector::pillar_support::{
     collect_pillar_groups, intersect_legal_values_for_pillar, pillars_are_swap_compatible,
 };
 use crate::heuristic::selector::seed::scoped_seed;
+use crate::pinning::{unpinned_indices, PinnedEntities};
 
 use super::bindings::{collect_bindings, find_binding, VariableBinding};
 use super::move_types::{

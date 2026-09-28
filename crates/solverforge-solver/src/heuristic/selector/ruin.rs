@@ -81,6 +81,7 @@ use solverforge_core::domain::PlanningSolution;
 use solverforge_scoring::Director;
 
 use crate::heuristic::r#move::RuinMove;
+use crate::pinning::PinnedEntities;
 
 use super::move_selector::{
     CandidateId, CandidateStore, MoveCandidateRef, MoveCursor, MoveSelector,
@@ -314,7 +315,13 @@ where
 
     fn open_cursor<'a, D: Director<S>>(&'a self, score_director: &D) -> Self::Cursor<'a> {
         let access = self.access;
-        let total_entities = (access.entity_count)(score_director.working_solution());
+        let entity_count = (access.entity_count)(score_director.working_solution());
+        // Subsets are drawn from free entities only, in canonical index order.
+        // `free` is `None` when nothing is pinned, so the reset below stays the
+        // plain index fill.
+        let free = PinnedEntities::capture(score_director, access.descriptor_index)
+            .free_list(entity_count);
+        let total_entities = free.as_ref().map_or(entity_count, Vec::len);
 
         let min = self.min_ruin_count.min(total_entities);
         let max = self.max_ruin_count.min(total_entities);
@@ -328,8 +335,13 @@ where
                 if total_entities == 0 {
                     return SmallVec::new();
                 }
-                for (index, entity) in permutation.iter_mut().enumerate() {
-                    *entity = index;
+                match &free {
+                    None => {
+                        for (index, entity) in permutation.iter_mut().enumerate() {
+                            *entity = index;
+                        }
+                    }
+                    Some(free) => permutation.copy_from_slice(free),
                 }
                 let ruin_count = if min == max {
                     min
@@ -352,7 +364,10 @@ where
     }
 
     fn size<D: Director<S>>(&self, score_director: &D) -> usize {
-        let total = (self.access.entity_count)(score_director.working_solution());
+        let total = PinnedEntities::capture(score_director, self.access.descriptor_index)
+            .unpinned_count((self.access.entity_count)(
+                score_director.working_solution(),
+            ));
         if total == 0 {
             return 0;
         }

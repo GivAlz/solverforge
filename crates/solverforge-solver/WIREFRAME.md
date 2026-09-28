@@ -32,7 +32,7 @@ src/
 ├── runtime/compiler/executor/runner/failure.rs — Cold propagation of configured-runtime execution failures to the public run boundary
 ├── runtime/provider_cursor.rs           — One lazy compound-provider cursor; static Rust providers retain typed candidates/function pointers, while host callbacks alone use raw named edits and object-safe dispatch
 ├── model_support.rs                     — Hidden `PlanningModelSupport` bridge implemented by `planning_model!` for model-owned scalar hook attachment, scalar group attachment, model/solution validation, and shadow updates
-├── pinning.rs                           — Internal descriptor-backed pin checks for solver-generated moves and entity mutations
+├── pinning.rs                           — Internal descriptor-backed pin checks for solver-generated moves and entity mutations, plus the per-cursor pinned-entity snapshot selectors use to skip pinned entities
 ├── list_placement.rs                    — Private partial fixed-owner restriction helpers for list construction, ruin/recreate, Clarke-Wright, and list selectors; detects all-selected-elements-fixed-to-current so intra-owner reordering still streams while cross-owner moves are filtered
 ├── descriptor.rs                        — Re-exports descriptor bindings, selectors, move types, and internal construction/runtime helpers
 ├── descriptor/
@@ -482,6 +482,8 @@ Requires: `Send + Debug`.
 | `size` | `fn<D: Director<S>>(&self, score_director: &D) -> usize` |
 | `is_never_ending` | `fn(&self) -> bool` |
 
+`FromSolutionEntitySelector` and `AllEntitiesSelector` yield only entities that are unpinned when `iter()` is called, in index order; `size()` counts the same entities.
+
 ### `MoveSelector<S: PlanningSolution, M: Move<S>>` — `move_selector.rs`
 
 Selectors expose cursor-owned storage plus borrowable candidates. The solver
@@ -766,7 +768,7 @@ union variants and keep speculative rollback statically typed.
 
 **`MoveCandidateRef<'a, S, M>`** — borrowable move view: either `Borrowed(&M)` or `Sequential(SequentialCompositeMoveRef<'a, S, M>)`.
 
-Pinning is enforced when solver phases evaluate candidates: local search and scalar construction reject any move editing a pinned entity, including compound and sequential children. List construction and ruin/recreate exclude pinned owners before insertion, removal, route replacement, or destination scoring. Exhaustive search advances past pinned rows without clearing their input values. A pinned required row left unassigned still fails the compiled mandatory-completion gate; optional unassigned rows remain valid. Directly applying a public move outside a solver phase does not perform this phase-level pin check.
+Stock selectors do not enumerate pinned entities: the compiled scalar and list neighborhood leaves, `FromSolutionEntitySelector`, `AllEntitiesSelector`, the scalar and list ruin selectors, and the descriptor selectors capture each descriptor's pin state when a cursor opens and drop pinned entities from their entity snapshots. Pinned entities are therefore neither generated nor counted as evaluated, pinned list owners are neither sources nor destinations, pillars are formed from free entities only, nearby rankings fill their `max_nearby` slots with free candidates, and ruin subsets are drawn from free entities only. Free entities keep their canonical relative order, and `size()` counts only free-entity candidates. Pinning is also enforced when solver phases evaluate candidates: local search and scalar construction reject any move editing a pinned entity, including compound and sequential children. List construction and ruin/recreate exclude pinned owners before insertion, removal, route replacement, or destination scoring. Exhaustive search advances past pinned rows without clearing their input values. A pinned required row left unassigned still fails the compiled mandatory-completion gate; optional unassigned rows remain valid. Directly applying a public move outside a solver phase does not perform this phase-level pin check.
 
 **`MoveStreamContext`** — `{ step_index, step_seed, accepted_count_limit, selection_order }`. Methods: `new()`, `with_selection_order()`, `selection_order()`, `step_index()`, `step_seed()`, `accepted_count_limit()`, `start_offset()`, `stride()`, and `offset_seed()`.
 

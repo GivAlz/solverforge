@@ -4,5 +4,6 @@ mod clone_tracking;
 mod leaf_adapter;
 mod moves;
 mod parity;
+mod pinned;
 mod ruin_access;
 mod support;
