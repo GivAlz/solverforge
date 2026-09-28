@@ -258,6 +258,50 @@ impl<S: PlanningSolution> JobSlot<S> {
         Ok(())
     }
 
+    /// Clears a pending pause and wakes a worker parked in
+    /// [`Self::wait_while_paused`].
+    ///
+    /// The flag changes under `pause_gate`, so it cannot land between the
+    /// worker's flag check and its condvar wait and lose the wakeup.
+    pub(super) fn release_pause(&self) {
+        let _gate = self.pause_gate.lock().unwrap();
+        self.pause_requested.store(false, Ordering::SeqCst);
+        self.pause_condvar.notify_all();
+    }
+
+    /// Requests cancellation, clears any pending pause, and wakes a worker
+    /// parked in [`Self::wait_while_paused`].
+    ///
+    /// Like [`Self::release_pause`], the flags change under `pause_gate`.
+    pub(super) fn request_cancel(&self) {
+        let _gate = self.pause_gate.lock().unwrap();
+        self.terminate.store(true, Ordering::SeqCst);
+        self.pause_requested.store(false, Ordering::SeqCst);
+        self.pause_condvar.notify_all();
+    }
+
+    /// Parks the calling worker until the pause is released or cancelled.
+    ///
+    /// Every writer that clears `pause_requested` or sets `terminate` for a
+    /// parked worker must do so under `pause_gate` (see
+    /// [`Self::release_pause`] and [`Self::request_cancel`]).
+    pub(super) fn wait_while_paused(&self) {
+        self.wait_while_paused_observed(|| {});
+    }
+
+    /// [`Self::wait_while_paused`] with an observer that runs after the
+    /// worker has checked the pause flags under `pause_gate` and before it
+    /// parks on `pause_condvar`.
+    pub(super) fn wait_while_paused_observed(&self, mut before_wait: impl FnMut()) {
+        let mut guard = self.pause_gate.lock().unwrap();
+        while self.pause_requested.load(Ordering::Acquire)
+            && !self.terminate.load(Ordering::Acquire)
+        {
+            before_wait();
+            guard = self.pause_condvar.wait(guard).unwrap();
+        }
+    }
+
     pub(super) fn raw_state(&self) -> Option<SolverLifecycleState> {
         match self.state.load(Ordering::Acquire) {
             SLOT_SOLVING => Some(SolverLifecycleState::Solving),

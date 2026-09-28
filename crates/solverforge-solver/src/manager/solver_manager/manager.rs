@@ -229,11 +229,9 @@ where
                     state,
                 });
             }
-            slot.pause_requested.store(false, Ordering::SeqCst);
+            slot.release_pause();
             Ok(())
-        })?;
-        slot.pause_condvar.notify_one();
-        Ok(())
+        })
     }
 
     pub fn cancel(&self, job_id: usize) -> Result<(), SolverManagerError> {
@@ -255,12 +253,9 @@ where
                 });
             }
 
-            slot.terminate.store(true, Ordering::SeqCst);
-            slot.pause_requested.store(false, Ordering::SeqCst);
+            slot.request_cancel();
             Ok(())
-        })?;
-        slot.pause_condvar.notify_one();
-        Ok(())
+        })
     }
 
     pub fn delete(&self, job_id: usize) -> Result<(), SolverManagerError> {
