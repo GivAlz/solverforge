@@ -119,7 +119,12 @@ pub struct SolverTelemetry {
     /// Candidate moves actually yielded to the engine across all phases.
     /// Exhaust a cursor or query selector sizing separately for logical size.
     pub moves_generated: u64,
+    /// Moves evaluated across all phases, including construction.
     pub moves_evaluated: u64,
+    /// The part of `moves_evaluated` made inside construction-heuristic
+    /// phases (placement candidates, Clarke-Wright savings, list 2-opt
+    /// reconnections). Subtract it for search-only work.
+    pub construction_moves_evaluated: u64,
     pub moves_accepted: u64,
     pub moves_applied: u64,
     pub moves_score_improving: u64,
@@ -143,6 +148,8 @@ pub struct SolverTelemetry {
     pub scalar_assignment_required_remaining: u64,
     pub generation_time: Duration,
     pub evaluation_time: Duration,
+    /// Solve-clock time spent inside completed construction phases.
+    pub construction_time: Duration,
     pub phase: Option<PhaseTelemetry>,
     pub selector_telemetry: Vec<SelectorTelemetry>,
     pub move_telemetry: Vec<MoveTelemetry>,
@@ -159,6 +166,7 @@ impl SolverTelemetry {
             step_count: 0,
             moves_generated: 0,
             moves_evaluated: 0,
+            construction_moves_evaluated: 0,
             moves_accepted: 0,
             moves_applied: 0,
             moves_score_improving: 0,
@@ -182,12 +190,19 @@ impl SolverTelemetry {
             scalar_assignment_required_remaining: 0,
             generation_time: Duration::ZERO,
             evaluation_time: Duration::ZERO,
+            construction_time: Duration::ZERO,
             phase: None,
             selector_telemetry: Vec::new(),
             move_telemetry: Vec::new(),
             applied_move_trace: Vec::new(),
             candidate_trace: None,
         }
+    }
+
+    /// Moves evaluated by search phases, excluding construction evaluations.
+    pub fn search_moves_evaluated(&self) -> u64 {
+        self.moves_evaluated
+            .saturating_sub(self.construction_moves_evaluated)
     }
 
     /// Removes bounded candidate-pull diagnostic detail before ordinary

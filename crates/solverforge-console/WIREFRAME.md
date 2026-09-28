@@ -62,7 +62,7 @@ The formatter recognizes these `event` field values:
 | `phase_end` | Phase end line with duration, steps, throughput, accepted/generated/evaluated counts, score calculations, generation/evaluation time, and score |
 | `progress` | Prompt first-work and then periodic construction/local-search progress with phase name, steps, speed, evaluated/accepted/generated move counts, score calculations, acceptance rate, current score, and best score when distinct |
 | `step` | TRACE-only individual move evaluation line keyed by `move_index` |
-| `solve_end` | Final solve line and summary box with score, generated/evaluated/accepted move counts, step count, score calculations, timing, throughput, and acceptance rate |
+| `solve_end` | Final solve line and summary box with score, generated/evaluated/accepted move counts, step count, score calculations, timing, search-phase throughput (`moves_speed`), acceptance rate, and an `in Construction` row for `construction_moves_evaluated` when construction evaluated candidates |
 
 Startup scale labels are shape-aware: list solves render `elements`; scalar
 solves render `candidates`.

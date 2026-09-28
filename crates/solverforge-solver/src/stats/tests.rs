@@ -245,6 +245,37 @@ fn throughput_helpers_use_stage_specific_durations() {
 }
 
 #[test]
+fn search_throughput_excludes_construction_work() {
+    let mut stats = SolverStats::default();
+    stats.start();
+    stats.record_evaluated_move(Duration::ZERO);
+    stats.record_construction_move_evaluated();
+    stats.record_evaluated_move(Duration::ZERO);
+    stats.record_construction_move_evaluated();
+    stats.record_evaluated_move(Duration::ZERO);
+    stats.record_construction_time(Duration::from_secs(3_600));
+
+    assert_eq!(stats.moves_evaluated, 3);
+    assert_eq!(stats.construction_moves_evaluated, 2);
+    assert_eq!(stats.search_moves_evaluated(), 1);
+    assert_eq!(stats.construction_time(), Duration::from_secs(3_600));
+    // Construction time is clamped to the solve clock rather than going negative.
+    assert_eq!(
+        stats.search_evaluated_throughput(),
+        Throughput {
+            count: 1,
+            elapsed: Duration::ZERO,
+        }
+    );
+
+    let snapshot = stats.snapshot();
+    assert_eq!(snapshot.moves_evaluated, 3);
+    assert_eq!(snapshot.construction_moves_evaluated, 2);
+    assert_eq!(snapshot.search_moves_evaluated(), 1);
+    assert_eq!(snapshot.construction_time, Duration::from_secs(3_600));
+}
+
+#[test]
 fn whole_units_per_second_uses_integer_rate_math() {
     assert_eq!(whole_units_per_second(3, Duration::from_millis(2_000)), 1);
     assert_eq!(whole_units_per_second(9, Duration::from_secs(2)), 4);

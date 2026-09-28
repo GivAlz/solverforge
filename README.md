@@ -336,7 +336,10 @@ type = "change_move_selector"
 Runtime telemetry now preserves exact counts and `Duration`s through the whole
 pipeline. Retained status/events expose generated, evaluated, and accepted move
 counts together with generation and evaluation durations; human-facing
-`moves/s` remains a display-only derived value.
+`moves/s` remains a display-only derived value. `moves_evaluated` totals every
+phase, while `construction_moves_evaluated` breaks out the evaluations made
+inside construction heuristics (including Clarke-Wright and list K-opt); the
+final `Moves/s` covers search phases only.
 
 Generic and specialized construction phases publish the same engine-owned
 lifecycle and progress telemetry as local search. With verbose logging, the
@@ -453,7 +456,8 @@ models show average `candidates`.
 ║  Generation Time:                              1.24s     ║
 ║  Evaluation Time:                             28.76s     ║
 ║  Moves/s:                                    456,000     ║
-║  Moves Evaluated:                            104,864     ║
+║  Moves Evaluated:                            104,878     ║
+║    in Construction:                               14     ║
 ║  Moves Accepted:                              12,456     ║
 ║  Score Calcs:                                104,864     ║
 ║  Acceptance:                                  11.9%      ║

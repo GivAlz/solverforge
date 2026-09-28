@@ -187,3 +187,42 @@ fn format_event_renders_phase_end_with_exact_duration_string() {
     assert!(output.contains("2,189"));
     assert!(output.contains("Local Search"));
 }
+
+#[test]
+fn format_event_renders_construction_evaluations_apart_from_search_rate() {
+    let outputs = capture_events(|| {
+        tracing::info!(
+            target: "solverforge_solver::test",
+            event = "solve_end",
+            score = "0hard/-11777soft",
+            steps = 3u64,
+            moves_evaluated = 119_600u64,
+            construction_moves_evaluated = 119_600u64,
+            moves_speed = 0u64,
+        );
+    });
+    let end_output = outputs
+        .iter()
+        .find(|output| output.contains("Solving complete"))
+        .cloned()
+        .expect("expected solve_end output");
+    let row = |label: &str| {
+        end_output
+            .lines()
+            .find(|line| line.contains(label))
+            .unwrap_or_else(|| panic!("expected a `{label}` row"))
+            .to_string()
+    };
+    assert!(row("Moves/s:").contains(" 0 "));
+    assert!(row("Moves Evaluated:").contains("119,600"));
+    assert!(row("in Construction:").contains("119,600"));
+
+    let search_only = EventVisitor {
+        event: Some("solve_end".to_string()),
+        score: Some("0hard/0soft".to_string()),
+        moves_evaluated: Some(10),
+        ..EventVisitor::default()
+    };
+    let search_output = format_event(&search_only, Level::INFO);
+    assert!(!search_output.contains("in Construction:"));
+}

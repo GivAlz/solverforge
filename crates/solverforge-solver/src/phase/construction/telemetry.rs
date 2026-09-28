@@ -117,7 +117,7 @@ where
     D: Director<S>,
     ProgressCb: ProgressCallback<S>,
 {
-    let mut phase_scope = PhaseScope::with_phase_type(solver_scope, phase_index, phase_type);
+    let mut phase_scope = PhaseScope::construction(solver_scope, phase_index, phase_type);
     info!(
         event = "phase_start",
         phase = phase_type,
@@ -127,6 +127,10 @@ where
     let result = run(&mut phase_scope);
 
     let duration = phase_scope.elapsed();
+    phase_scope
+        .solver_scope_mut()
+        .stats_mut()
+        .record_construction_time(duration);
     let steps = phase_scope.step_count();
     let stats = phase_scope.stats();
     let moves_speed = whole_units_per_second(stats.moves_evaluated, duration);

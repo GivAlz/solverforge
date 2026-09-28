@@ -249,3 +249,35 @@ fn test_construction_resume_retries_interrupted_placement() {
 
     MANAGER.delete(job_id).expect("delete resumed job");
 }
+
+#[test]
+fn construction_evaluations_are_counted_apart_from_search_moves() {
+    let mut solver_scope = SolverScope::new(create_simple_nqueens_director(4));
+    solver_scope.start_solving();
+
+    let placer = create_placer((0..4).collect());
+    let mut phase = ConstructionHeuristicPhase::new(placer, FirstFitForager::new());
+    phase.solve(&mut solver_scope);
+
+    let construction_moves = solver_scope.stats().moves_evaluated;
+    assert!(construction_moves > 0);
+    assert_eq!(
+        solver_scope.stats().construction_moves_evaluated,
+        construction_moves
+    );
+    assert_eq!(solver_scope.stats().search_moves_evaluated(), 0);
+    assert_eq!(solver_scope.stats().search_evaluated_throughput().count, 0);
+
+    {
+        let mut search_scope =
+            crate::scope::PhaseScope::with_phase_type(&mut solver_scope, 1, "Local Search");
+        search_scope.record_evaluated_move(Duration::ZERO);
+    }
+
+    let telemetry = solver_scope.stats().snapshot();
+    assert_eq!(telemetry.moves_evaluated, construction_moves + 1);
+    assert_eq!(telemetry.construction_moves_evaluated, construction_moves);
+    assert_eq!(telemetry.search_moves_evaluated(), 1);
+    assert!(telemetry.construction_time <= telemetry.elapsed);
+    assert_eq!(solver_scope.stats().search_evaluated_throughput().count, 1);
+}

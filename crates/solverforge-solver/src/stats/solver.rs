@@ -8,6 +8,8 @@ use super::{
     CandidateTraceTelemetry, MoveTelemetry, SelectorTelemetry, SolverTelemetry, Throughput,
 };
 
+mod construction;
+
 const APPLIED_MOVE_TRACE_LIMIT: usize = 8;
 
 #[derive(Debug, Default)]
@@ -19,8 +21,11 @@ pub struct SolverStats {
     /// Total candidate moves actually yielded by cursors across all phases.
     /// Unrequested logical neighborhood tails are not generated work.
     pub moves_generated: u64,
-    // Total moves evaluated across all phases.
+    /// Total moves evaluated across all phases, including the construction
+    /// evaluations also counted by `construction_moves_evaluated`.
     pub moves_evaluated: u64,
+    /// Candidate evaluations made inside construction-heuristic phases.
+    pub construction_moves_evaluated: u64,
     // Total moves accepted across all phases.
     pub moves_accepted: u64,
     // Total moves applied across all phases.
@@ -46,6 +51,7 @@ pub struct SolverStats {
     scalar_assignment_required_remaining_by_group: BTreeMap<&'static str, u64>,
     generation_time: Duration,
     evaluation_time: Duration,
+    construction_time: Duration,
     selector_stats: Vec<SelectorTelemetry>,
     move_stats: BTreeMap<&'static str, MoveTelemetry>,
     applied_move_trace: Vec<AppliedMoveTelemetry>,
@@ -281,6 +287,7 @@ impl SolverStats {
             step_count: self.step_count,
             moves_generated: self.moves_generated,
             moves_evaluated: self.moves_evaluated,
+            construction_moves_evaluated: self.construction_moves_evaluated,
             moves_accepted: self.moves_accepted,
             moves_applied: self.moves_applied,
             moves_score_improving: self.moves_score_improving(),
@@ -304,6 +311,7 @@ impl SolverStats {
             scalar_assignment_required_remaining: self.scalar_assignment_required_remaining,
             generation_time: self.generation_time,
             evaluation_time: self.evaluation_time,
+            construction_time: self.construction_time,
             phase: None,
             selector_telemetry: self.selector_stats.clone(),
             move_telemetry: self.move_stats.values().cloned().collect(),
