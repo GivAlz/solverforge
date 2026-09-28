@@ -306,7 +306,9 @@ src/
 │   │   ├── partitioner.rs              — SolutionPartitioner trait, FunctionalPartitioner, ThreadCount
 │   │   ├── partitioner_tests.rs        — Tests
 │   │   ├── phase.rs                    — PartitionedSearchPhase<P, Part>
-│   │   └── phase_tests.rs              — Tests
+│   │   ├── phase_tests.rs              — Tests
+│   │   ├── tests.rs                    — Test module declarations
+│   │   └── tests/solver_termination.rs — Solver-level termination and cancellation of partition children
 │   ├── sequence.rs                      — PhaseSequence<P>
 │   └── localsearch/vnd/
 │       ├── mod.rs                       — Internal VND module declarations
@@ -1330,7 +1332,7 @@ Score bounders: `SoftScoreBounder`, `FixedOffsetBounder<S>`, `()` (no-op).
 
 ### Partitioned Search
 
-**`PartitionedSearchPhase<S, PD, Part, SDF, PF, CP>`** — Generic over partitioner, score director factory, phase factory, child phases. Child scopes inherit runtime control, environment mode, remaining time limit, in-phase limits, and deterministic child seeds, but retained-job publication stays on the parent scope. The runtime phase-relative termination overlay is not propagated into a child scope. Pause checkpoints are emitted only from the parent full-solution boundary; child pause/cancel/config termination outcomes prevent partition merge.
+**`PartitionedSearchPhase<S, PD, Part, SDF, PF, CP>`** — Generic over partitioner, score director factory, phase factory, child phases. Child scopes inherit runtime control, environment mode, remaining time limit, in-phase limits, and deterministic child seeds, but retained-job publication stays on the parent scope. The runtime phase-relative termination overlay is not propagated into a child scope. Pause checkpoints are emitted only from the parent full-solution boundary; child pause/cancel outcomes prevent partition merge. A child stopped by configured termination still returns its best partition: the parent merges every partition, updates the best solution if the merge improves it, and then marks the solve terminated by config.
 
 **`FunctionalPartitioner<S, PF, MF>`** — Closure-based partitioner.
 
