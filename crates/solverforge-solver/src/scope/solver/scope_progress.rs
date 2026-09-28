@@ -135,8 +135,8 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
     }
 
     pub(crate) fn publish_current_solution_as_best(&mut self) {
-        self.retain_current_solution_as_best();
         self.best_solution_publication_enabled = true;
+        self.retain_current_solution_as_best();
         self.report_best_solution();
     }
 
@@ -572,8 +572,8 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
 
     fn inphase_best_score_limit_reached(&self) -> bool {
         self.inphase_best_score_limit
-            .zip(self.best_score)
-            .is_some_and(|(target, best)| best >= target)
+            .zip(self.complete_best_score())
+            .is_some_and(|(target, best)| *best >= target)
     }
 
     fn inphase_step_count_limit_reached(&self) -> bool {

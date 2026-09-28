@@ -225,6 +225,7 @@ where
         }
         let elapsed = scope.elapsed().unwrap_or_default();
         let best_score = match (scope.best_score, scope.current_score) {
+            _ if !scope.best_solution_publication_enabled => None,
             (Some(best), Some(current)) => Some(best.max(current)),
             (Some(best), None) | (None, Some(best)) => Some(best),
             (None, None) => None,
@@ -269,13 +270,16 @@ where
         self.last_improvement_elapsed = elapsed;
     }
 
+    /* `solution_complete` is false while mandatory construction work is
+    unresolved: such scores never count toward the best score limit. */
     fn observe_score(
         &mut self,
         score: S::Score,
+        solution_complete: bool,
         completed_step_count: u64,
         elapsed: Duration,
     ) {
-        if self.best_score.is_none_or(|best| score > best) {
+        if solution_complete && self.best_score.is_none_or(|best| score > best) {
             self.best_score = Some(score);
         }
         if self.improvement_score.is_none_or(|best| score > best) {
@@ -451,6 +455,17 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
         self.best_solution_publication_enabled
     }
 
+    /// Best score of a complete solution, for score-based termination.
+    ///
+    /// While best-solution publication is deferred because mandatory
+    /// construction work is unresolved, the tracked best score belongs to an
+    /// incomplete solution and no best score limit may be judged against it.
+    pub(crate) fn complete_best_score(&self) -> Option<&S::Score> {
+        self.best_solution_publication_enabled
+            .then_some(self.best_score.as_ref())
+            .flatten()
+    }
+
     pub(crate) fn yielded_to_parent(&self) -> bool {
         self.yielded_to_parent
     }
@@ -527,8 +542,9 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
 
     fn observe_phase_score(&mut self, score: S::Score, completed_step_count: u64) {
         let elapsed = self.elapsed().unwrap_or_default();
+        let solution_complete = self.best_solution_publication_enabled;
         if let Some(termination) = &mut self.phase_termination {
-            termination.observe_score(score, completed_step_count, elapsed);
+            termination.observe_score(score, solution_complete, completed_step_count, elapsed);
         }
     }
 
