@@ -279,7 +279,8 @@ where
             .entity_count(self.binding.descriptor_index)
             .unwrap_or(0);
         let solution = score_director.working_solution() as &dyn Any;
-        let entity_values = (0..count)
+        let pins = PinnedEntities::capture(score_director, self.binding.descriptor_index);
+        let entity_values = unpinned_indices(&pins, count)
             .map(|entity_index| {
                 let entity = self
                     .solution_descriptor
@@ -308,8 +309,9 @@ where
         let count = score_director
             .entity_count(self.binding.descriptor_index)
             .unwrap_or(0);
+        let pins = PinnedEntities::capture(score_director, self.binding.descriptor_index);
         let mut total = 0;
-        for entity_index in 0..count {
+        for entity_index in unpinned_indices(&pins, count) {
             let entity = self
                 .solution_descriptor
                 .get_entity(
@@ -381,6 +383,7 @@ where
             solution,
             count,
             "entity lookup failed for swap selector",
+            PinnedEntities::capture(score_director, self.binding.descriptor_index),
         );
 
         DescriptorSwapMoveCursor::all(binding, descriptor, legality_index, count)
@@ -397,6 +400,7 @@ where
             solution,
             count,
             "entity lookup failed for swap selector",
+            PinnedEntities::capture(score_director, self.binding.descriptor_index),
         );
         legality_index.count_legal_pairs()
     }
@@ -443,7 +447,8 @@ where
             .unwrap_or(0);
         let max_nearby = self.max_nearby;
         let value_candidate_limit = self.value_candidate_limit;
-        let entity_values = (0..count)
+        let pins = PinnedEntities::capture(score_director, self.binding.descriptor_index);
+        let entity_values = unpinned_indices(&pins, count)
             .map(|entity_index| {
                 let entity = self
                     .solution_descriptor
@@ -539,6 +544,7 @@ where
             solution,
             count,
             "entity lookup failed for nearby swap selector",
+            PinnedEntities::capture(score_director, self.binding.descriptor_index),
         );
         let mut pairs = Vec::new();
         for left_entity_index in 0..count {

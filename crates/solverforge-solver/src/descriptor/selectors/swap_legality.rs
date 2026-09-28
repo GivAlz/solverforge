@@ -30,6 +30,7 @@ struct SwapLegalityIndex {
     current_values: Vec<Option<usize>>,
     allows_unassigned: bool,
     domain: SwapLegalityDomain,
+    pins: PinnedEntities,
 }
 
 impl SwapLegalityIndex {
@@ -39,6 +40,7 @@ impl SwapLegalityIndex {
         solution: &dyn Any,
         count: usize,
         lookup_context: &str,
+        pins: PinnedEntities,
     ) -> Self {
         let current_values = (0..count)
             .map(|entity_index| {
@@ -74,6 +76,7 @@ impl SwapLegalityIndex {
             current_values,
             allows_unassigned: binding.allows_unassigned,
             domain,
+            pins,
         }
     }
 
@@ -172,6 +175,8 @@ impl SwapLegalityIndex {
     fn can_swap(&self, left_entity_index: usize, right_entity_index: usize) -> bool {
         if left_entity_index == right_entity_index
             || self.current_values[left_entity_index] == self.current_values[right_entity_index]
+            || self.pins.is_pinned(left_entity_index)
+            || self.pins.is_pinned(right_entity_index)
         {
             return false;
         }

@@ -17,6 +17,7 @@ use crate::heuristic::selector::move_selector::{
     CandidateId, CandidateStore, MoveCandidateRef, MoveCursor, MoveSelector, MoveStreamContext,
 };
 use crate::heuristic::selector::seed::scoped_seed;
+use crate::pinning::PinnedEntities;
 
 use super::r#move::RuntimeScalarMove;
 use super::spec::{
@@ -87,6 +88,9 @@ where
         S::Score: Score,
     {
         let solution = director.clone_working_solution();
+        // Pinned rows are dropped from every family's entity snapshot, so
+        // they are never generated, counted, or evaluated.
+        let pins = PinnedEntities::capture(director, self.slot.descriptor_index());
         let state = match self.spec {
             ScalarNeighborhoodSpec::Change {
                 value_candidate_limit,
@@ -95,11 +99,13 @@ where
                 solution,
                 context,
                 value_candidate_limit,
+                &pins,
             )),
             ScalarNeighborhoodSpec::Swap => RuntimeScalarCursorState::Swap(SwapCursor::new(
                 self.slot.clone(),
                 solution,
                 context,
+                pins,
             )),
             ScalarNeighborhoodSpec::NearbyChange {
                 max_nearby,
@@ -110,6 +116,7 @@ where
                 context,
                 max_nearby,
                 value_candidate_limit.unwrap_or(usize::MAX),
+                pins,
             )),
             ScalarNeighborhoodSpec::NearbySwap { max_nearby } => {
                 RuntimeScalarCursorState::NearbySwap(NearbySwapCursor::new(
@@ -117,6 +124,7 @@ where
                     solution,
                     context,
                     max_nearby,
+                    pins,
                 ))
             }
             ScalarNeighborhoodSpec::PillarChange {
@@ -130,6 +138,7 @@ where
                 minimum_sub_pillar_size,
                 maximum_sub_pillar_size,
                 value_candidate_limit,
+                &pins,
             )),
             ScalarNeighborhoodSpec::PillarSwap {
                 minimum_sub_pillar_size,
@@ -140,6 +149,7 @@ where
                 context,
                 minimum_sub_pillar_size,
                 maximum_sub_pillar_size,
+                &pins,
             )),
             ScalarNeighborhoodSpec::RuinRecreate {
                 min_ruin_count,
@@ -157,6 +167,7 @@ where
                     min_ruin_count,
                     max_ruin_count,
                     moves_per_step,
+                    &pins,
                     ruin_state.rng_mut(),
                 );
                 context.apply_selection_order(
@@ -223,8 +234,10 @@ where
     fn size<D: Director<S>>(&self, director: &D) -> usize {
         match self.spec {
             ScalarNeighborhoodSpec::RuinRecreate { moves_per_step, .. } => {
-                usize::from(self.slot.entity_count(director.working_solution()) > 0)
-                    .saturating_mul(moves_per_step)
+                let entity_count = self.slot.entity_count(director.working_solution());
+                let unpinned = PinnedEntities::capture(director, self.slot.descriptor_index())
+                    .unpinned_count(entity_count);
+                usize::from(unpinned > 0).saturating_mul(moves_per_step)
             }
             _ => self.open_cursor(director).count(),
         }

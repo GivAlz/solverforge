@@ -12,6 +12,7 @@ use solverforge_scoring::Director;
 
 use crate::heuristic::r#move::ListRuinMove;
 use crate::heuristic::selector::list_kernel::{NativeRuinEmitter, RuinCursor, RuinSourcePool};
+use crate::pinning::PinnedEntities;
 
 use super::move_selector::{
     CandidateId, MoveCandidateRef, MoveCursor, MoveSelector, MoveStreamContext,
@@ -195,7 +196,9 @@ where
     ) -> Self::Cursor<'a> {
         let solution = score_director.working_solution();
         let entity_count = (self.entity_count)(solution);
+        let pins = PinnedEntities::capture(score_director, self.descriptor_index);
         let non_empty = (0..entity_count)
+            .filter(|&entity| !pins.is_pinned(entity))
             .filter_map(|entity| {
                 let len = (self.list_len)(solution, entity);
                 (len > 0
@@ -256,7 +259,11 @@ where
     }
 
     fn size<D: Director<S>>(&self, score_director: &D) -> usize {
-        if (self.entity_count)(score_director.working_solution()) > 0 {
+        let entity_count = (self.entity_count)(score_director.working_solution());
+        if PinnedEntities::capture(score_director, self.descriptor_index)
+            .unpinned_count(entity_count)
+            > 0
+        {
             self.moves_per_step
         } else {
             0

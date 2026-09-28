@@ -18,9 +18,12 @@ use crate::heuristic::selector::move_selector::{
 };
 use crate::heuristic::selector::nearby_list_change::CrossEntityDistanceMeter;
 
+use crate::pinning::PinnedEntities;
+
 use super::super::emission::RuntimeListEmitter;
 use super::super::spec::RuntimeListNeighborhoodSpec;
 use super::super::RuntimeListMove;
+use super::entities::{free_entities, selected_entities};
 use super::probe::{
     runtime_precedence_analysis, runtime_precedence_graph, runtime_ruin_source_pool,
     runtime_selected_owners, RuntimeKOptProbe, RuntimeNearbyProbe,
@@ -179,6 +182,7 @@ pub(super) fn open_slot_cursor<'a, S, V, DM, IDM>(
     context: MoveStreamContext,
     kopt_patterns: &'a [KOptReconnection],
     ruin_seed: Option<u64>,
+    pins: &PinnedEntities,
 ) -> RuntimeListSlotCursor<'a, S, V, DM, IDM>
 where
     S: PlanningSolution + Clone + Send + Sync + 'static,
@@ -207,6 +211,7 @@ where
                 &slot,
                 solution,
                 context,
+                pins,
                 Some(salts.entity ^ descriptor_index as u64),
             );
             let owners = runtime_selected_owners(&slot, solution, &entities, &route_lens);
@@ -228,6 +233,7 @@ where
                 &slot,
                 solution,
                 context,
+                pins,
                 Some(STATIC_NEARBY_CHANGE_ENTITY_SALT ^ descriptor_index as u64),
             );
             let owners = runtime_selected_owners(&slot, solution, &entities, &route_lens);
@@ -254,6 +260,7 @@ where
                 &slot,
                 solution,
                 context,
+                pins,
                 Some(STATIC_SWAP_SALTS.entity ^ descriptor_index as u64),
             );
             let owners = runtime_selected_owners(&slot, solution, &entities, &route_lens);
@@ -278,6 +285,7 @@ where
                 &slot,
                 solution,
                 context,
+                pins,
                 Some(0x91D7_9E8A_0000_0001 ^ descriptor_index as u64),
             );
             let owners = runtime_selected_owners(&slot, solution, &entities, &route_lens);
@@ -297,7 +305,7 @@ where
         }
         RuntimeListNeighborhoodSpec::Precedence => {
             let Some(analysis) =
-                runtime_precedence_analysis(&slot, solution, precedence_route_graph)
+                runtime_precedence_analysis(&slot, solution, precedence_route_graph, pins)
             else {
                 return RuntimeListSlotCursor::Empty;
             };
@@ -314,6 +322,7 @@ where
                 &slot,
                 solution,
                 context,
+                pins,
                 Some(STATIC_NEARBY_SWAP_ENTITY_SALT ^ descriptor_index as u64),
             );
             let owners = runtime_selected_owners(&slot, solution, &entities, &route_lens);
@@ -343,6 +352,7 @@ where
                 &slot,
                 solution,
                 context,
+                pins,
                 Some(STATIC_SUBLIST_CHANGE_SALTS.entity ^ descriptor_index as u64),
             );
             let owners = runtime_selected_owners(&slot, solution, &entities, &route_lens);
@@ -369,6 +379,7 @@ where
                 &slot,
                 solution,
                 context,
+                pins,
                 Some(STATIC_SUBLIST_SWAP_ENTITY_SALT ^ descriptor_index as u64),
             );
             let owners = runtime_selected_owners(&slot, solution, &entities, &route_lens);
@@ -391,6 +402,7 @@ where
                 &slot,
                 solution,
                 context,
+                pins,
                 Some(STATIC_REVERSE_ENTITY_SALT ^ descriptor_index as u64),
             );
             RuntimeListSlotCursor::Reverse(
@@ -409,7 +421,8 @@ where
             min_segment_len,
             max_nearby: 0,
         } => {
-            let entities = (0..ListAccess::entity_count(&slot, solution))
+            let entities = free_entities(&slot, solution, pins)
+                .into_iter()
                 .map(|entity| (entity, ListAccess::list_len(&slot, solution, entity)))
                 .collect();
             RuntimeListSlotCursor::KOpt(KOptCursor::new(
@@ -427,7 +440,7 @@ where
             min_segment_len,
             max_nearby,
         } => {
-            let entities = (0..ListAccess::entity_count(&slot, solution)).collect();
+            let entities = free_entities(&slot, solution, pins);
             let length_slot = slot.clone();
             RuntimeListSlotCursor::NearbyKOpt(NearbyKOptCursor::new(
                 RuntimeListEmitter::new(slot.clone(), false),
@@ -453,7 +466,7 @@ where
             let Some(seed) = ruin_seed else {
                 return RuntimeListSlotCursor::Empty;
             };
-            let source_pool = runtime_ruin_source_pool(&slot, solution, max_source_list_len);
+            let source_pool = runtime_ruin_source_pool(&slot, solution, max_source_list_len, pins);
             RuntimeListSlotCursor::Ruin(RuinCursor::new(
                 RuntimeListEmitter::new(slot, skip_empty_destinations),
                 SmallRng::seed_from_u64(seed),
@@ -464,36 +477,4 @@ where
             ))
         }
     }
-}
-
-fn selected_entities<S, V, DM, IDM>(
-    slot: &RuntimeListSlot<S, V, DM, IDM>,
-    solution: &S,
-    context: MoveStreamContext,
-    rotation_salt: Option<u64>,
-) -> (Vec<usize>, Vec<usize>)
-where
-    S: PlanningSolution + Clone + Send + Sync + 'static,
-    V: Clone + PartialEq + Send + Sync + std::fmt::Debug + 'static,
-    DM: Clone + Send + Sync + std::fmt::Debug + CrossEntityDistanceMeter<S>,
-    IDM: Clone + Send + Sync + std::fmt::Debug + CrossEntityDistanceMeter<S>,
-{
-    let canonical_entities = (0..ListAccess::entity_count(slot, solution)).collect::<Vec<_>>();
-    let entities = match rotation_salt {
-        Some(salt) => (0..canonical_entities.len())
-            .map(|offset| {
-                canonical_entities[context.selection_index_without_replacement(
-                    offset,
-                    canonical_entities.len(),
-                    salt,
-                )]
-            })
-            .collect(),
-        None => canonical_entities,
-    };
-    let route_lens = entities
-        .iter()
-        .map(|&entity| ListAccess::list_len(slot, solution, entity))
-        .collect();
-    (entities, route_lens)
 }

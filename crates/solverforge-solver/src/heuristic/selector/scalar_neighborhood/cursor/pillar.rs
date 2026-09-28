@@ -8,6 +8,8 @@ use crate::heuristic::selector::pillar_support::{
     collect_pillar_groups, intersect_legal_values_for_pillar, PillarGroup,
 };
 
+use crate::pinning::PinnedEntities;
+
 use super::super::spec::RuntimeScalarRecipe;
 
 fn sub_pillar_config(minimum_size: usize, maximum_size: usize) -> SubPillarConfig {
@@ -28,18 +30,23 @@ fn collect_groups<S>(
     solution: &S,
     minimum_size: usize,
     maximum_size: usize,
+    pins: &PinnedEntities,
 ) -> Vec<PillarGroup<usize>>
 where
     S: PlanningSolution,
 {
     let descriptor_index = slot.descriptor_index();
+    // Pillars are formed from free entities only; a pinned member would make
+    // every move on its pillar non-doable.
     collect_pillar_groups(
-        (0..slot.entity_count(solution)).map(|entity_index| {
-            (
-                EntityReference::new(descriptor_index, entity_index),
-                slot.current_value(solution, entity_index),
-            )
-        }),
+        (0..slot.entity_count(solution))
+            .filter(|&entity_index| !pins.is_pinned(entity_index))
+            .map(|entity_index| {
+                (
+                    EntityReference::new(descriptor_index, entity_index),
+                    slot.current_value(solution, entity_index),
+                )
+            }),
         &sub_pillar_config(minimum_size, maximum_size),
     )
 }
@@ -91,12 +98,14 @@ where
         minimum_sub_pillar_size: usize,
         maximum_sub_pillar_size: usize,
         value_candidate_limit: Option<usize>,
+        pins: &PinnedEntities,
     ) -> Self {
         let mut inputs: Vec<PillarChangeInput> = collect_groups(
             &slot,
             &solution,
             minimum_sub_pillar_size,
             maximum_sub_pillar_size,
+            pins,
         )
         .into_iter()
         .map(|group| {
@@ -177,12 +186,14 @@ where
         context: MoveStreamContext,
         minimum_sub_pillar_size: usize,
         maximum_sub_pillar_size: usize,
+        pins: &PinnedEntities,
     ) -> Self {
         let groups = collect_groups(
             &slot,
             &solution,
             minimum_sub_pillar_size,
             maximum_sub_pillar_size,
+            pins,
         );
         let mut inputs = Vec::new();
         for left_offset in 0..groups.len() {

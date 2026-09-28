@@ -3,6 +3,7 @@ use solverforge_core::domain::PlanningSolution;
 use crate::builder::{RuntimeScalarSlot, ValueSource};
 use crate::heuristic::selector::move_selector::MoveStreamContext;
 use crate::heuristic::selector::nearby_support::{NearbyTopK, RankedNearbyCandidate};
+use crate::pinning::PinnedEntities;
 
 use super::super::spec::RuntimeScalarRecipe;
 use super::slot_identity;
@@ -23,6 +24,7 @@ pub(super) struct SwapCursor<S> {
     slot: RuntimeScalarSlot<S>,
     solution: S,
     snapshot: SwapSnapshot,
+    pins: PinnedEntities,
     context: MoveStreamContext,
     left_offset: usize,
     right_offset: usize,
@@ -41,7 +43,12 @@ impl<S> SwapCursor<S>
 where
     S: PlanningSolution,
 {
-    pub(super) fn new(slot: RuntimeScalarSlot<S>, solution: S, context: MoveStreamContext) -> Self {
+    pub(super) fn new(
+        slot: RuntimeScalarSlot<S>,
+        solution: S,
+        context: MoveStreamContext,
+        pins: PinnedEntities,
+    ) -> Self {
         let snapshot = match &slot {
             RuntimeScalarSlot::Static(static_slot) => {
                 let entity_count = slot.entity_count(&solution);
@@ -63,6 +70,7 @@ where
             slot,
             solution,
             snapshot,
+            pins,
             context,
             left_offset: 0,
             right_offset: 0,
@@ -128,6 +136,10 @@ where
         while self.left_offset < entity_count {
             let left_entity_index =
                 self.ordered_left_entity(entity_count, self.left_offset, SWAP_LEFT_SALT ^ identity);
+            if self.pins.is_pinned(left_entity_index) {
+                self.left_offset += 1;
+                continue;
+            }
             while self.right_offset < entity_count {
                 let right_entity_index = self.ordered_right_entity(
                     entity_count,
@@ -135,7 +147,9 @@ where
                     SWAP_RIGHT_SALT ^ left_entity_index as u64 ^ self.slot.variable_index() as u64,
                 );
                 self.right_offset += 1;
-                if left_entity_index >= right_entity_index {
+                if left_entity_index >= right_entity_index
+                    || self.pins.is_pinned(right_entity_index)
+                {
                     continue;
                 }
                 let left_value = self.current_value(left_entity_index);
@@ -190,6 +204,7 @@ enum NearbySwapMode<S> {
 pub(super) struct NearbySwapCursor<S> {
     slot: RuntimeScalarSlot<S>,
     max_nearby: usize,
+    pins: PinnedEntities,
     mode: NearbySwapMode<S>,
 }
 
@@ -202,6 +217,7 @@ where
         solution: S,
         context: MoveStreamContext,
         max_nearby: usize,
+        pins: PinnedEntities,
     ) -> Self {
         let mode = if slot.is_dynamic() {
             NearbySwapMode::Lazy {
@@ -214,7 +230,7 @@ where
                 source_loaded: false,
             }
         } else {
-            let rows = eager_nearby_rows(&slot, &solution, context, max_nearby);
+            let rows = eager_nearby_rows(&slot, &solution, context, max_nearby, &pins);
             NearbySwapMode::Eager {
                 rows,
                 row_offset: 0,
@@ -224,6 +240,7 @@ where
         Self {
             slot,
             max_nearby,
+            pins,
             mode,
         }
     }
@@ -265,6 +282,10 @@ where
                         NEARBY_SWAP_ENTITY_STRIDE_SALT,
                         slot_identity(&self.slot),
                     );
+                    if self.pins.is_pinned(left_entity_index) {
+                        *left_offset += 1;
+                        continue;
+                    }
                     if !*source_loaded {
                         *right_entities = rank_nearby_entities(
                             &self.slot,
@@ -274,6 +295,7 @@ where
                             self.max_nearby,
                             NearbyOrientation::DynamicDirectional,
                             *context,
+                            &self.pins,
                         );
                         *right_offset = 0;
                         *source_loaded = true;
@@ -302,22 +324,27 @@ fn eager_nearby_rows<S>(
     solution: &S,
     context: MoveStreamContext,
     max_nearby: usize,
+    pins: &PinnedEntities,
 ) -> Vec<NearbySwapRow>
 where
     S: PlanningSolution,
 {
     let entity_count = slot.entity_count(solution);
-    (0..entity_count)
-        .map(|left_offset| {
-            let left_entity_index = ordered_entity(
-                entity_count,
-                left_offset,
-                context,
-                NEARBY_SWAP_ENTITY_START_SALT,
-                NEARBY_SWAP_ENTITY_STRIDE_SALT,
-                slot_identity(slot),
-            );
-            NearbySwapRow {
+    let mut rows = Vec::with_capacity(pins.unpinned_count(entity_count));
+    rows.extend(
+        (0..entity_count)
+            .map(|left_offset| {
+                ordered_entity(
+                    entity_count,
+                    left_offset,
+                    context,
+                    NEARBY_SWAP_ENTITY_START_SALT,
+                    NEARBY_SWAP_ENTITY_STRIDE_SALT,
+                    slot_identity(slot),
+                )
+            })
+            .filter(|&left_entity_index| !pins.is_pinned(left_entity_index))
+            .map(|left_entity_index| NearbySwapRow {
                 left_entity_index,
                 right_entities: rank_nearby_entities(
                     slot,
@@ -327,10 +354,11 @@ where
                     max_nearby,
                     NearbyOrientation::StaticCanonical,
                     context,
+                    pins,
                 ),
-            }
-        })
-        .collect()
+            }),
+    );
+    rows
 }
 
 #[derive(Clone, Copy)]
@@ -339,6 +367,7 @@ enum NearbyOrientation {
     DynamicDirectional,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn rank_nearby_entities<S>(
     slot: &RuntimeScalarSlot<S>,
     solution: &S,
@@ -347,6 +376,7 @@ fn rank_nearby_entities<S>(
     max_nearby: usize,
     orientation: NearbyOrientation,
     context: MoveStreamContext,
+    pins: &PinnedEntities,
 ) -> Vec<usize>
 where
     S: PlanningSolution,
@@ -364,7 +394,10 @@ where
             NearbyOrientation::StaticCanonical => right_entity_index > left_entity_index,
             NearbyOrientation::DynamicDirectional => right_entity_index != left_entity_index,
         };
-        if !allowed_orientation || right_entity_index >= entity_count {
+        if !allowed_orientation
+            || right_entity_index >= entity_count
+            || pins.is_pinned(right_entity_index)
+        {
             return;
         }
         let right_value = slot.current_value(solution, right_entity_index);

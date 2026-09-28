@@ -3,6 +3,7 @@ use solverforge_core::domain::PlanningSolution;
 use crate::builder::RuntimeScalarSlot;
 use crate::heuristic::selector::move_selector::MoveStreamContext;
 use crate::heuristic::selector::nearby_support::{NearbyTopK, RankedNearbyCandidate};
+use crate::pinning::PinnedEntities;
 
 use super::super::spec::RuntimeScalarRecipe;
 use super::slot_identity;
@@ -41,6 +42,7 @@ where
         solution: S,
         context: MoveStreamContext,
         value_candidate_limit: Option<usize>,
+        pins: &PinnedEntities,
     ) -> Self {
         let dynamic = slot.is_dynamic();
         let identity = slot_identity(&slot);
@@ -55,37 +57,44 @@ where
             STATIC_CHANGE_ENTITY_SALT
         };
         let entity_count = slot.entity_count(&solution);
-        let rows = (0..entity_count)
-            .map(|entity_offset| {
-                let entity_index = context.selection_index_without_replacement(
-                    entity_offset,
-                    entity_count,
-                    entity_salt ^ identity,
-                );
-                let mut canonical_values = Vec::new();
-                slot.visit_candidate_values(
-                    &solution,
-                    entity_index,
-                    value_candidate_limit,
-                    &mut |value| canonical_values.push(value),
-                );
-                let value_count = canonical_values.len();
-                let values = (0..value_count)
-                    .map(|value_offset| {
-                        canonical_values[context.selection_index(
-                            value_offset,
-                            value_count,
-                            value_salt ^ entity_index as u64 ^ identity,
-                        )]
-                    })
-                    .collect();
-                ChangeRow {
-                    entity_index,
-                    values,
-                    current_assigned: slot.current_value(&solution, entity_index).is_some(),
-                }
-            })
-            .collect::<Vec<_>>();
+        // Pinned rows are skipped after ordering, so free rows keep their
+        // canonical relative order.
+        let mut rows = Vec::with_capacity(pins.unpinned_count(entity_count));
+        rows.extend(
+            (0..entity_count)
+                .map(|entity_offset| {
+                    context.selection_index_without_replacement(
+                        entity_offset,
+                        entity_count,
+                        entity_salt ^ identity,
+                    )
+                })
+                .filter(|&entity_index| !pins.is_pinned(entity_index))
+                .map(|entity_index| {
+                    let mut canonical_values = Vec::new();
+                    slot.visit_candidate_values(
+                        &solution,
+                        entity_index,
+                        value_candidate_limit,
+                        &mut |value| canonical_values.push(value),
+                    );
+                    let value_count = canonical_values.len();
+                    let values = (0..value_count)
+                        .map(|value_offset| {
+                            canonical_values[context.selection_index(
+                                value_offset,
+                                value_count,
+                                value_salt ^ entity_index as u64 ^ identity,
+                            )]
+                        })
+                        .collect();
+                    ChangeRow {
+                        entity_index,
+                        values,
+                        current_assigned: slot.current_value(&solution, entity_index).is_some(),
+                    }
+                }),
+        );
         Self {
             slot,
             rows,
@@ -153,6 +162,7 @@ pub(super) struct NearbyChangeCursor<S> {
     slot: RuntimeScalarSlot<S>,
     max_nearby: usize,
     source_limit: usize,
+    pins: PinnedEntities,
     mode: NearbyChangeMode<S>,
 }
 
@@ -166,6 +176,7 @@ where
         context: MoveStreamContext,
         max_nearby: usize,
         source_limit: usize,
+        pins: PinnedEntities,
     ) -> Self {
         let mode = if slot.is_dynamic() {
             NearbyChangeMode::Lazy {
@@ -179,7 +190,8 @@ where
                 unassigned_pending: false,
             }
         } else {
-            let rows = eager_nearby_rows(&slot, &solution, context, max_nearby, source_limit);
+            let rows =
+                eager_nearby_rows(&slot, &solution, context, max_nearby, source_limit, &pins);
             NearbyChangeMode::Eager {
                 rows,
                 row_offset: 0,
@@ -190,6 +202,7 @@ where
             slot,
             max_nearby,
             source_limit,
+            pins,
             mode,
         }
     }
@@ -249,6 +262,10 @@ where
                         NEARBY_CHANGE_ENTITY_STRIDE_SALT,
                         slot_identity(&self.slot),
                     );
+                    if self.pins.is_pinned(entity_index) {
+                        *entity_offset += 1;
+                        continue;
+                    }
                     if !*source_loaded {
                         *values = rank_nearby_values(
                             &self.slot,
@@ -296,22 +313,27 @@ fn eager_nearby_rows<S>(
     context: MoveStreamContext,
     max_nearby: usize,
     source_limit: usize,
+    pins: &PinnedEntities,
 ) -> Vec<NearbyChangeRow>
 where
     S: PlanningSolution,
 {
     let entity_count = slot.entity_count(solution);
-    (0..entity_count)
-        .map(|offset| {
-            let entity_index = ordered_entity(
-                entity_count,
-                offset,
-                context,
-                NEARBY_CHANGE_ENTITY_START_SALT,
-                NEARBY_CHANGE_ENTITY_STRIDE_SALT,
-                slot_identity(slot),
-            );
-            NearbyChangeRow {
+    let mut rows = Vec::with_capacity(pins.unpinned_count(entity_count));
+    rows.extend(
+        (0..entity_count)
+            .map(|offset| {
+                ordered_entity(
+                    entity_count,
+                    offset,
+                    context,
+                    NEARBY_CHANGE_ENTITY_START_SALT,
+                    NEARBY_CHANGE_ENTITY_STRIDE_SALT,
+                    slot_identity(slot),
+                )
+            })
+            .filter(|&entity_index| !pins.is_pinned(entity_index))
+            .map(|entity_index| NearbyChangeRow {
                 entity_index,
                 values: rank_nearby_values(
                     slot,
@@ -323,9 +345,9 @@ where
                 ),
                 unassigned_pending: slot.allows_unassigned()
                     && slot.current_value(solution, entity_index).is_some(),
-            }
-        })
-        .collect()
+            }),
+    );
+    rows
 }
 
 fn rank_nearby_values<S>(

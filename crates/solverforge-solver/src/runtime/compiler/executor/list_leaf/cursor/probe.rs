@@ -12,6 +12,7 @@ use crate::heuristic::selector::precedence_route::{
     build_precedence_route_graph, PrecedenceRouteGraph,
 };
 use crate::list_placement::OwnerRestriction;
+use crate::pinning::PinnedEntities;
 
 /// Immutable nearby probe over the one compiled list carrier.
 #[derive(Clone)]
@@ -218,6 +219,7 @@ pub(super) fn runtime_ruin_source_pool<S, V, DM, IDM>(
     slot: &RuntimeListSlot<S, V, DM, IDM>,
     solution: &S,
     max_source_list_len: Option<usize>,
+    pins: &PinnedEntities,
 ) -> RuinSourcePool
 where
     S: PlanningSolution + Clone + Send + Sync + 'static,
@@ -227,6 +229,7 @@ where
 {
     let entity_count = ListAccess::entity_count(slot, solution);
     let non_empty = (0..entity_count)
+        .filter(|&entity| !pins.is_pinned(entity))
         .filter_map(|entity| {
             let length = ListAccess::list_len(slot, solution, entity);
             (length > 0 && max_source_list_len.is_none_or(|maximum| length <= maximum))
@@ -260,6 +263,7 @@ pub(super) fn runtime_precedence_analysis<S, V, DM, IDM>(
     slot: &RuntimeListSlot<S, V, DM, IDM>,
     solution: &S,
     route_graph: Option<PrecedenceRouteGraph>,
+    pins: &PinnedEntities,
 ) -> Option<CriticalAnalysis>
 where
     S: PlanningSolution + Clone + Send + Sync + 'static,
@@ -284,7 +288,7 @@ where
             .unwrap_or(i64::MAX)
         })
         .collect::<Vec<_>>();
-    let entities = (0..ListAccess::entity_count(slot, solution)).collect::<Vec<_>>();
+    let entities = super::entities::free_entities(slot, solution, pins);
     Some(critical_analysis_from_graph(
         &durations,
         &entities,
