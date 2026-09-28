@@ -371,6 +371,7 @@ src/
 │   ├── solver/progress.rs               — SolverProgressRef, SolverProgressKind, SolverLifecycleState status, and ProgressCallback dispatch
 │   ├── solver/scope_core.rs             — Core SolverScope construction, shared phase progress pulse, runtime publication, lifecycle control, mutation, and child-scope helpers
 │   ├── solver/scope_progress.rs         — SolverScope score/best-solution/progress/stat reporting helpers
+│   ├── solver/unimproved.rs             — Internal solver-wide unimproved window backing the unimproved step/time terminations
 │   ├── phase.rs                         — PhaseScope<'t, 'a, S, D, BestCb = ()>
 │   ├── step.rs                          — StepScope<'t, 'a, 'b, S, D, BestCb = ()>
 │   └── tests.rs                         — Tests
@@ -1394,8 +1395,8 @@ snapshot, or partial paused snapshot.
 | `StepCountTermination` | `u64` | Total step limit |
 | `BestScoreTermination<Sc>` | `Sc: Score` | Target score |
 | `BestScoreFeasibleTermination<S, F>` | Closure | `score_at_least_zero()` convenience |
-| `UnimprovedStepCountTermination<S>` | `u64` | Steps without improvement |
-| `UnimprovedTimeTermination<S>` | `Duration` | Time without improvement |
+| `UnimprovedStepCountTermination<S>` | `u64` | Steps completed since the best solution last improved; in-phase limit |
+| `UnimprovedTimeTermination<S>` | `Duration` | Pause-aware time since the best solution last improved; in-phase limit |
 | `MoveCountTermination<S>` | `u64` | Total moves evaluated |
 | `ScoreCalculationCountTermination<S>` | `u64` | Total score calculations |
 | `DiminishedReturnsTermination<S>` | `Duration, f64` | Window + min improvement rate |
@@ -1403,6 +1404,15 @@ snapshot, or partial paused snapshot.
 | `AndTermination<T, S, D>` | Tuple | All must trigger |
 
 Composite terminations use tuple impls (up to 8 elements) generated via `impl_composite_termination!` macro.
+
+Step-count, move-count, score-calculation-count, best-score, and unimproved
+step/time terminations install in-phase limits, so a solver-level limit stops
+search phases between steps instead of only at top-level phase boundaries.
+The unimproved window restarts whenever the best solution improves or is
+replaced, and while construction work runs: construction is never cut short by
+an unimproved limit, and the configured runtime's completion publication starts
+the window for the following local search. Partitioned child scopes do not
+inherit unimproved limits; the parent scope observes them at partition boundaries.
 
 ## Manager System
 

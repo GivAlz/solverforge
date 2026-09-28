@@ -104,6 +104,7 @@ pub struct SolverScope<'t, S: PlanningSolution, D: Director<S>, ProgressCb = ()>
     pub inphase_move_count_limit: Option<u64>,
     pub inphase_score_calc_count_limit: Option<u64>,
     inphase_best_score_limit: Option<S::Score>,
+    unimproved: UnimprovedWindow,
     phase_termination: Option<ScopedPhaseTermination<S>>,
 }
 
@@ -379,6 +380,7 @@ impl<'t, S: PlanningSolution, D: Director<S>> SolverScope<'t, S, D, ()> {
             inphase_move_count_limit: None,
             inphase_score_calc_count_limit: None,
             inphase_best_score_limit: None,
+            unimproved: UnimprovedWindow::default(),
             phase_termination: None,
         }
     }
@@ -424,6 +426,7 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
             inphase_move_count_limit: None,
             inphase_score_calc_count_limit: None,
             inphase_best_score_limit: None,
+            unimproved: UnimprovedWindow::default(),
             phase_termination: None,
         }
     }
@@ -534,6 +537,7 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
 
     pub(crate) fn observe_phase_step_score(&mut self, score: S::Score) {
         self.observe_phase_score(score, self.total_step_count.saturating_add(1));
+        self.observe_unimproved_step_score(score);
     }
 
     fn child_time_deadline(&self) -> Option<Instant> {
@@ -580,6 +584,7 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
             inphase_move_count_limit: self.inphase_move_count_limit,
             inphase_score_calc_count_limit: self.inphase_score_calc_count_limit,
             inphase_best_score_limit: self.inphase_best_score_limit,
+            unimproved: self.unimproved,
             phase_termination: self.phase_termination,
         }
     }
@@ -595,6 +600,7 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
         self.solution_revision = 1;
         self.progress_pulse = None;
         self.construction_frontier.reset();
+        self.unimproved.reset();
         self.stats.start();
     }
 
