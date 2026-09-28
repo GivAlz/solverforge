@@ -107,6 +107,9 @@ Derives: `Debug, Clone, Default, Deserialize, Serialize`.
 | `unimproved_step_count_limit` | `Option<u64>` | Max unimproved steps |
 | `unimproved_seconds_spent_limit` | `Option<u64>` | Max seconds without improvement |
 
+Every configured limit is binding: the solve stops as soon as any one of them
+is reached (OR semantics). An unparsable `best_score_limit` is ignored.
+
 **Methods:**
 
 | Method | Signature | Note |

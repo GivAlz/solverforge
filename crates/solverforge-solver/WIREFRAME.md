@@ -48,8 +48,10 @@ src/
 │   ├── selectors/dispatch.rs            — Descriptor selector dispatch root
 │   ├── selectors/dispatch/*.rs          — Descriptor selector dispatch build/type chunks
 │   └── tests/mod.rs                     — Descriptor test root with support, selector, cartesian, pillar, nearby, and ruin-recreate chunks under `tests/mod/`
-├── run.rs                               — AnyTermination, ChannelProgressCallback, build_termination(), log_solve_start(), and try_run_solver_with_config_and_search()
-├── run_tests.rs                         — Tests
+├── run.rs                               — ChannelProgressCallback, log_solve_start(), try_run_solver_with_config_and_search(), and re-exports of AnyTermination/build_termination()
+├── run/termination.rs                   — AnyTermination, build_termination(), and the configured termination/execution-policy parse
+├── run/tests.rs                         — Configured run tests
+├── run/tests/termination.rs             — Configured termination tests
 ├── runtime_build_error.rs               — Public RuntimeBuildError and RuntimeBuildResult declaration/compiler/preparation/execution boundary
 ├── builder/
 │   ├── mod.rs                           — Re-exports from all builder submodules
@@ -1651,7 +1653,7 @@ work remains. A valid fully assigned source records `SkippedNoWork`; duplicate
 or undeclared assigned keys fail at that reached boundary. Unreached and
 already-terminated construction nodes remain lazy and do not bind the source.
 
-### Configured Run Boundary — `run.rs`, `runtime_build_error.rs`
+### Configured Run Boundary — `run.rs`, `run/termination.rs`, `runtime_build_error.rs`
 
 `log_solve_start()` emits shape-specific startup telemetry:
 list solves log `element_count`, scalar solves log average
@@ -1660,9 +1662,13 @@ as `elements` or `candidates`.
 
 `AnyTermination<S, D>`, `build_termination()`, and
 `ChannelProgressCallback<S>` are public under `solverforge_solver::run`, not
-crate-root re-exports. `AnyTermination` is the concrete config-dispatch enum
-over no termination and the supported time/score/work combinations;
-`build_termination()` returns it together with the effective time limit.
+crate-root re-exports. `AnyTermination` is the concrete config-driven
+termination: it holds one optional child per `[termination]` criterion (time,
+best score, step count, unimproved step count, unimproved time), terminates as
+soon as any configured child does, and installs every configured child's
+in-phase limit. `build_termination()` returns it together with the effective
+time limit; a score/work criterion configured without a time limit gets the
+entrypoint's fallback time guard, and an empty configuration is unbounded.
 `ChannelProgressCallback` is the runtime-owned `ProgressCallback` adapter and
 has no public constructor.
 
