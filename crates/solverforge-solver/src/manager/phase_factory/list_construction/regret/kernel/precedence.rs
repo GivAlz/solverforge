@@ -5,7 +5,7 @@ use std::cmp::Reverse;
 use solverforge_core::domain::PlanningSolution;
 use solverforge_scoring::Director;
 
-use super::evaluation::{apply_insertion, evaluate_owner_regret};
+use super::evaluation::{apply_insertion, evaluate_regret_over_owners};
 use super::{
     precedence_frontier_choice_is_better, source_position_by_index, RegretAccess, RegretEvaluation,
     RegretValue, OWNER_RESTRICTED_BEST_INSERTION_WORK_BUDGET,
@@ -264,15 +264,20 @@ where
             }
             let entry = &entries[entry_position];
             let owner = owners[entry_position];
-            let result =
-                match evaluate_owner_regret(access, entry, owner, control_policy, phase_scope) {
-                    RegretEvaluation::Complete(result) => result,
-                    RegretEvaluation::Interrupted => {
-                        interrupted = true;
-                        break;
-                    }
-                };
-            let Some((regret, position, score, trace_token)) = result else {
+            let result = match evaluate_regret_over_owners(
+                access,
+                entry,
+                owner..owner + 1,
+                control_policy,
+                phase_scope,
+            ) {
+                RegretEvaluation::Complete(result) => result,
+                RegretEvaluation::Interrupted => {
+                    interrupted = true;
+                    break;
+                }
+            };
+            let Some((regret, _, position, score, trace_token)) = result else {
                 continue;
             };
             let better = match best_choice {

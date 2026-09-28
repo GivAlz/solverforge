@@ -1485,6 +1485,18 @@ cheapest insertion orders unassigned elements by downstream criticality before
 greedy insertion, while regret insertion uses the same metadata for
 topological element ordering and regret tie-breaking.
 
+`ListRegretInsertionPhase<S, E>` (and `list_regret_insertion` in solver
+config) uses regret-2 over owners: for every unassigned element it takes the
+best insertion score in each candidate owner, and the regret is the gap between
+the best owner and the second-best owner. Each step inserts the element with
+the largest regret at its best position; equal regrets prefer the better
+insertion score, then larger precedence downstream work, then construction
+order. An element with fewer than two feasible owners (fixed by
+`element_owner_fn`, only one non-pinned owner, or a single owner overall) has
+unbounded regret and is inserted before every element with a finite regret, so
+with one owner the phase degenerates to cheapest insertion. Equal insertion
+scores keep the lowest owner and position. `k` is fixed at 2.
+
 All specialized list-construction public constructors require an explicit
 `element_source_key`. It is the stable unique identity for a declared element,
 its assigned representation, and precedence-successor values. Construction
