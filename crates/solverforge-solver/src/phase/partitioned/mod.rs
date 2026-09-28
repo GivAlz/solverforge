@@ -30,3 +30,6 @@ pub use child_phases::ChildPhases;
 pub use config::PartitionedSearchConfig;
 pub use partitioner::{FunctionalPartitioner, SolutionPartitioner, ThreadCount};
 pub use phase::PartitionedSearchPhase;
+
+#[cfg(test)]
+mod tests;

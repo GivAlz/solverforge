@@ -143,6 +143,14 @@ by the parent scope while it still owns a full public solution. If a child yield
 to pause, cancel, or configured termination, partitioned search abandons the
 partial child results instead of merging them.
 
+Work done inside partition children is part of the solve. When the children
+return, their steps, evaluated moves, score calculations, and selector and move
+telemetry are added to the parent's statistics, so solver telemetry and the
+reported moves/s include it, even when the partial results are abandoned.
+Children share solver-level step, move, and score-calculation limits while they
+run, and once their partitions are merged their steps and moves stay counted
+against those limits, so later phases only get the remaining budget.
+
 ## Practical path
 
 1. Start from the scaffolded project.
