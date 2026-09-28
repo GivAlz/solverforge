@@ -15,6 +15,8 @@ use crate::scope::SolverScope;
 
 #[path = "tests/parity.rs"]
 mod parity;
+#[path = "tests/route_regret.rs"]
+mod route_regret;
 
 #[derive(Clone, Debug)]
 struct Plan {

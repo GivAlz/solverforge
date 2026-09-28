@@ -21,6 +21,14 @@ pub(crate) use kernel::run_regret;
 
 /// List construction phase using the canonical regret-insertion kernel.
 ///
+/// Regret is regret-2 over owners: each unassigned element's best insertion
+/// score is taken per candidate owner, and its regret is the gap between the
+/// best and the second-best owner. Each step inserts the element with the
+/// largest regret at its best position. Elements with fewer than two feasible
+/// owners (fixed owner, pinned alternatives, or a single owner overall) rank
+/// above every finite regret, so a single-owner model degenerates to cheapest
+/// insertion.
+///
 /// The explicit source key is part of the public contract: it identifies a
 /// declared element independently of its payload representation, so assigned
 /// values, precedence successors, and trace coordinates never rely on

@@ -122,19 +122,61 @@ where
     )
 }
 
+/// Best insertion of one element together with its regret-2 across owners.
+///
+/// Regret is measured over routes, not over positions: each candidate owner
+/// contributes its single best insertion score, and the regret is the gap
+/// between the best and the second-best owner.  An element with fewer than
+/// two feasible owners (a fixed owner restriction, pinned alternatives, or a
+/// single owner overall) has `RegretValue::Forced`, so it is placed before
+/// every element that still has a finite regret; among forced elements the
+/// choice degenerates to cheapest insertion.
+pub(super) type RegretCandidate<Sc> = (
+    RegretValue<Sc>,
+    usize,
+    usize,
+    Sc,
+    Option<CandidateTracePullToken>,
+);
+
 pub(super) fn evaluate_regret<S, A, D, BestCb>(
     access: &A,
     entry: &SourceElement<A::Element>,
     entity_count: usize,
     control_policy: StepControlPolicy,
     phase_scope: &mut PhaseScope<'_, '_, S, D, BestCb>,
-) -> RegretEvaluation<(
-    RegretValue<S::Score>,
-    usize,
-    usize,
-    S::Score,
-    Option<CandidateTracePullToken>,
-)>
+) -> RegretEvaluation<RegretCandidate<S::Score>>
+where
+    S: PlanningSolution,
+    A: RegretAccess<S>,
+    D: Director<S>,
+    BestCb: ProgressCallback<S>,
+{
+    let restriction = access.owner_restriction(
+        phase_scope.score_director().working_solution(),
+        entity_count,
+        &entry.element,
+    );
+    evaluate_regret_over_owners(
+        access,
+        entry,
+        candidate_entities(restriction, entity_count),
+        control_policy,
+        phase_scope,
+    )
+}
+
+/// Scores every insertion position of `entry` in each non-pinned owner of
+/// `owners`, in canonical owner-then-position order.  Ties keep the first
+/// evaluated insertion, both for the selected position and for the owner
+/// that supplies the best score.
+pub(super) fn evaluate_regret_over_owners<S, A, D, BestCb>(
+    access: &A,
+    entry: &SourceElement<A::Element>,
+    owners: impl Iterator<Item = usize>,
+    control_policy: StepControlPolicy,
+    phase_scope: &mut PhaseScope<'_, '_, S, D, BestCb>,
+) -> RegretEvaluation<RegretCandidate<S::Score>>
 where
     S: PlanningSolution,
     A: RegretAccess<S>,
@@ -142,13 +184,8 @@ where
     BestCb: ProgressCallback<S>,
 {
     let mut best: Option<(usize, usize, S::Score, Option<CandidateTracePullToken>)> = None;
-    let mut second_best: Option<S::Score> = None;
-    let restriction = access.owner_restriction(
-        phase_scope.score_director().working_solution(),
-        entity_count,
-        &entry.element,
-    );
-    for entity_index in candidate_entities(restriction, entity_count) {
+    let mut second_owner_best: Option<S::Score> = None;
+    for entity_index in owners {
         if crate::pinning::entity_is_pinned(
             phase_scope.score_director(),
             access.descriptor_index(),
@@ -160,6 +197,8 @@ where
             phase_scope.score_director().working_solution(),
             entity_index,
         );
+        let previous_best_score = best.map(|(_, _, score, _)| score);
+        let mut owner_best: Option<S::Score> = None;
         for position in 0..=len {
             if control_policy.should_terminate_construction(phase_scope.solver_scope_mut()) {
                 if let Some((_, _, _, Some(token))) = best.take() {
@@ -186,41 +225,42 @@ where
                     CandidateTraceDisposition::Evaluated,
                 );
             }
-            match best {
-                None => best = Some((entity_index, position, score, trace_token)),
-                Some((_, _, best_score, _)) if score > best_score => {
-                    if let Some((_, _, _, Some(token))) = best.take() {
-                        phase_scope.record_candidate_trace_disposition(
-                            token,
-                            CandidateTraceDisposition::ForagerIgnored,
-                        );
-                    }
-                    second_best = Some(best_score);
-                    best = Some((entity_index, position, score, trace_token));
-                }
-                Some(_) => match second_best {
-                    None => second_best = Some(score),
-                    Some(existing_second) if score > existing_second => second_best = Some(score),
-                    Some(_) => {}
-                },
-            }
-            if !matches!(best, Some((best_entity, best_position, _, _)) if best_entity == entity_index && best_position == position)
-            {
-                if let Some(token) = trace_token {
+            owner_best = Some(owner_best.map_or(score, |current| current.max(score)));
+            if best.is_none_or(|(_, _, best_score, _)| score > best_score) {
+                if let Some((_, _, _, Some(token))) = best.take() {
                     phase_scope.record_candidate_trace_disposition(
                         token,
                         CandidateTraceDisposition::ForagerIgnored,
                     );
                 }
+                best = Some((entity_index, position, score, trace_token));
+            } else if let Some(token) = trace_token {
+                phase_scope.record_candidate_trace_disposition(
+                    token,
+                    CandidateTraceDisposition::ForagerIgnored,
+                );
             }
+        }
+        // Keep the second-best owner-level score: either the previous overall
+        // best was beaten by this owner, or this owner may be the runner-up.
+        let Some(owner_best) = owner_best else {
+            continue;
+        };
+        let runner_up = match previous_best_score {
+            Some(previous) if owner_best > previous => previous,
+            Some(_) => owner_best,
+            None => continue,
+        };
+        if second_owner_best.is_none_or(|second| runner_up > second) {
+            second_owner_best = Some(runner_up);
         }
     }
 
     let Some((entity_index, position, best_score, trace_token)) = best else {
         return RegretEvaluation::Complete(None);
     };
-    let regret = second_best.map_or(RegretValue::Forced, |score| {
-        RegretValue::Finite(best_score - score)
+    let regret = second_owner_best.map_or(RegretValue::Forced, |second| {
+        RegretValue::Finite(best_score - second)
     });
     RegretEvaluation::Complete(Some((
         regret,
@@ -229,93 +269,4 @@ where
         best_score,
         trace_token,
     )))
-}
-
-pub(super) fn evaluate_owner_regret<S, A, D, BestCb>(
-    access: &A,
-    entry: &SourceElement<A::Element>,
-    owner_index: usize,
-    control_policy: StepControlPolicy,
-    phase_scope: &mut PhaseScope<'_, '_, S, D, BestCb>,
-) -> RegretEvaluation<(
-    RegretValue<S::Score>,
-    usize,
-    S::Score,
-    Option<CandidateTracePullToken>,
-)>
-where
-    S: PlanningSolution,
-    A: RegretAccess<S>,
-    D: Director<S>,
-    BestCb: ProgressCallback<S>,
-{
-    if crate::pinning::entity_is_pinned(
-        phase_scope.score_director(),
-        access.descriptor_index(),
-        owner_index,
-    ) {
-        return RegretEvaluation::Complete(None);
-    }
-    let len = access.list_len(phase_scope.score_director().working_solution(), owner_index);
-    let mut best: Option<(usize, S::Score, Option<CandidateTracePullToken>)> = None;
-    let mut second_best: Option<S::Score> = None;
-    for position in 0..=len {
-        if control_policy.should_terminate_construction(phase_scope.solver_scope_mut()) {
-            if let Some((_, _, Some(token))) = best.take() {
-                phase_scope.record_candidate_trace_disposition(
-                    token,
-                    CandidateTraceDisposition::ForagerIgnored,
-                );
-            }
-            return RegretEvaluation::Interrupted;
-        }
-        let trace_token = record_insertion_trial(
-            access,
-            phase_scope,
-            CandidateTraceSource::ListRegretInsertionTrial,
-            position,
-            entry,
-            owner_index,
-            position,
-        );
-        let score = eval_insertion(access, entry, owner_index, position, phase_scope);
-        if let Some(token) = trace_token {
-            phase_scope
-                .record_candidate_trace_disposition(token, CandidateTraceDisposition::Evaluated);
-        }
-        match best {
-            None => best = Some((position, score, trace_token)),
-            Some((_, best_score, _)) if score > best_score => {
-                if let Some((_, _, Some(token))) = best.take() {
-                    phase_scope.record_candidate_trace_disposition(
-                        token,
-                        CandidateTraceDisposition::ForagerIgnored,
-                    );
-                }
-                second_best = Some(best_score);
-                best = Some((position, score, trace_token));
-            }
-            Some(_) => match second_best {
-                None => second_best = Some(score),
-                Some(existing_second) if score > existing_second => second_best = Some(score),
-                Some(_) => {}
-            },
-        }
-        if !matches!(best, Some((best_position, _, _)) if best_position == position) {
-            if let Some(token) = trace_token {
-                phase_scope.record_candidate_trace_disposition(
-                    token,
-                    CandidateTraceDisposition::ForagerIgnored,
-                );
-            }
-        }
-    }
-
-    let Some((position, best_score, trace_token)) = best else {
-        return RegretEvaluation::Complete(None);
-    };
-    let regret = second_best.map_or(RegretValue::Forced, |score| {
-        RegretValue::Finite(best_score - score)
-    });
-    RegretEvaluation::Complete(Some((regret, position, best_score, trace_token)))
 }

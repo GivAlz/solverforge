@@ -129,8 +129,9 @@ pub enum ConstructionHeuristicType {
     // the list construction hook surface before phase build.
     ListCheapestInsertion,
 
-    // List regret insertion: inserts elements in order of highest placement regret and validates
-    // the list construction hook surface before phase build.
+    // List regret insertion (regret-2 over owners): inserts the element whose best owner beats
+    // its second-best owner by the most, at its best position, and validates the list
+    // construction hook surface before phase build.
     ListRegretInsertion,
 
     // List Clarke-Wright savings: greedy route merging by savings value; requires the declared
