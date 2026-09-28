@@ -193,9 +193,8 @@ pub struct SwapMoveConfig {
 
 // Nearby change move configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct NearbyChangeMoveConfig {
-    #[serde(default)]
     pub selection_order: Option<SelectionOrder>,
     pub selection_metric: Option<String>,
     pub max_nearby: usize,
@@ -219,9 +218,8 @@ impl Default for NearbyChangeMoveConfig {
 
 // Nearby swap move configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct NearbySwapMoveConfig {
-    #[serde(default)]
     pub selection_order: Option<SelectionOrder>,
     pub selection_metric: Option<String>,
     pub max_nearby: usize,
@@ -243,9 +241,8 @@ impl Default for NearbySwapMoveConfig {
 
 // Pillar change move configuration.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct PillarChangeMoveConfig {
-    #[serde(default)]
     pub selection_order: Option<SelectionOrder>,
     pub selection_metric: Option<String>,
     pub minimum_sub_pillar_size: usize,
@@ -257,9 +254,8 @@ pub struct PillarChangeMoveConfig {
 
 // Pillar swap move configuration.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct PillarSwapMoveConfig {
-    #[serde(default)]
     pub selection_order: Option<SelectionOrder>,
     pub selection_metric: Option<String>,
     pub minimum_sub_pillar_size: usize,
@@ -298,9 +294,8 @@ pub enum UnionWeighting {
 
 // Ruin-and-recreate move configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct RuinRecreateMoveSelectorConfig {
-    #[serde(default)]
     pub selection_order: Option<SelectionOrder>,
     pub selection_metric: Option<String>,
     pub min_ruin_count: usize,
@@ -354,9 +349,8 @@ pub struct ListChangeMoveConfig {
 
 // Configuration for `NearbyListChangeMoveSelector`.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct NearbyListChangeMoveConfig {
-    #[serde(default)]
     pub selection_order: Option<SelectionOrder>,
     pub selection_metric: Option<String>,
     // Maximum nearby destination positions to consider per source element.
@@ -390,9 +384,8 @@ pub struct ListSwapMoveConfig {
 
 // Configuration for `ListPermuteMoveSelector`.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct ListPermuteMoveConfig {
-    #[serde(default)]
     pub selection_order: Option<SelectionOrder>,
     pub selection_metric: Option<String>,
     // Minimum window size (inclusive). Default: 2.
@@ -428,9 +421,8 @@ pub struct ListPrecedenceMoveConfig {
 
 // Configuration for `NearbyListSwapMoveSelector`.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct NearbyListSwapMoveConfig {
-    #[serde(default)]
     pub selection_order: Option<SelectionOrder>,
     pub selection_metric: Option<String>,
     // Maximum nearby swap partners to consider per source element.
@@ -453,9 +445,8 @@ impl Default for NearbyListSwapMoveConfig {
 
 // Configuration for `SublistChangeMoveSelector` (Or-opt).
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct SublistChangeMoveConfig {
-    #[serde(default)]
     pub selection_order: Option<SelectionOrder>,
     pub selection_metric: Option<String>,
     // Minimum segment size (inclusive). Default: 1.
@@ -481,9 +472,8 @@ impl Default for SublistChangeMoveConfig {
 
 // Configuration for `SublistSwapMoveSelector`.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct SublistSwapMoveConfig {
-    #[serde(default)]
     pub selection_order: Option<SelectionOrder>,
     pub selection_metric: Option<String>,
     // Minimum segment size (inclusive). Default: 1.
@@ -520,9 +510,8 @@ pub struct ListReverseMoveConfig {
 
 // Configuration for `KOptMoveSelector`.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct KOptMoveSelectorConfig {
-    #[serde(default)]
     pub selection_order: Option<SelectionOrder>,
     pub selection_metric: Option<String>,
     // K value (number of cuts). Default: 3.
@@ -551,9 +540,8 @@ impl Default for KOptMoveSelectorConfig {
 
 // Configuration for `ListRuinMoveSelector` (LNS).
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct ListRuinMoveSelectorConfig {
-    #[serde(default)]
     pub selection_order: Option<SelectionOrder>,
     pub selection_metric: Option<String>,
     // Minimum number of elements to ruin per move. Default: 2.
@@ -565,7 +553,6 @@ pub struct ListRuinMoveSelectorConfig {
     // Optional maximum source list length eligible for this selector.
     pub max_source_list_len: Option<usize>,
     // Whether recreate should skip currently empty destination lists.
-    #[serde(default)]
     pub skip_empty_destinations: bool,
     #[serde(flatten)]
     pub target: VariableTargetConfig,
