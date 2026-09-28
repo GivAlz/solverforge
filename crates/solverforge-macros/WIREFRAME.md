@@ -215,7 +215,7 @@ arguments are compile errors.
 
 **`#[planning_list_variable]` parameters:**
 - `element_collection = "field"` — solution field with all list elements
-- `domain = "cvrp"` — stock CVRP list-variable profile; supplies the CVRP solution trait, distance meters, strict route hooks with safe unreachable-leg rejection, relaxed Clarke-Wright savings hooks, and savings metric class
+- `domain = "cvrp"` — stock CVRP list-variable profile; supplies the CVRP solution trait, distance meters, strict route hooks with safe unreachable-leg rejection, relaxed Clarke-Wright savings hooks (merges are not capacity-bounded), and savings metric class
 - `distance_meter = "path"` — optional cross-entity distance meter type
 - `intra_distance_meter = "path"` — optional intra-entity distance meter type
 - `route_hooks = "path"` — optional route-local hook module with `get`, `set`, `depot`, `distance`, and `feasible`; k-opt uses these hooks and Clarke-Wright uses only `set` for assignment
@@ -231,7 +231,9 @@ When `domain = "cvrp"` is present, the profiled defaults above must be used as a
 coherent stock bundle. Overriding `distance_meter`, `intra_distance_meter`,
 `solution_trait`, `route_hooks`, `savings_hooks`, or `savings_metric_class_fn`
 is rejected unless the override repeats the exact stock path. Custom routing
-semantics should omit `domain = "cvrp"` and declare explicit hook paths instead.
+semantics should omit `domain = "cvrp"` and declare explicit hook paths instead;
+for example, capacity-bounded Clarke-Wright construction spells out the stock
+paths with `savings_hooks = "::solverforge::cvrp::capacity_savings_hooks"`.
 
 **Generated code:**
 - `impl PlanningSolution for T` — `type Score`, `score()`, `set_score()`, plus `update_entity_shadows()` / `update_all_shadows()` delegation to the manifest-owned support implementation when `#[shadow_variable_updates(...)]` configures list shadows.

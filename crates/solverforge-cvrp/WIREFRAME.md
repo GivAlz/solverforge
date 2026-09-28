@@ -83,6 +83,7 @@ All functions are generic over `S: VrpSolution`.
 | `savings_metric_class` | `fn<S: VrpSolution>(plan: &S, entity_idx: usize) -> usize` | Clarke-Wright metric class for owners that share backing `ProblemData` |
 | `savings_distance` | `fn<S: VrpSolution>(plan: &S, entity_idx: usize, from: usize, to: usize) -> i64` | Construction distance adapter for models that share exact CVRP route data |
 | `savings_feasible` | `fn<S: VrpSolution>(plan: &S, entity_idx: usize, route: &[usize]) -> bool` | Construction admissibility adapter that rejects only non-evaluable stock CVRP routes |
+| `savings_capacity_feasible` | `fn<S: VrpSolution>(plan: &S, entity_idx: usize, route: &[usize]) -> bool` | Opt-in capacity-aware construction admissibility: `savings_feasible` plus rejection of multi-visit routes over the owner's capacity; single visits and time windows stay scoreable |
 
 ### Usage as a macro domain profile
 
@@ -98,7 +99,36 @@ savings hooks, and savings metric class. Route-local phases use strict stock
 CVRP route feasibility. Clarke-Wright construction uses relaxed savings
 feasibility so assignment can stay broad while the score model compares
 capacity, lateness, and unreachable-leg violations against leaving work
-unassigned.
+unassigned. Because the relaxed gate does not bound merges by capacity,
+stock Clarke-Wright tends to merge every customer into one route whenever
+all savings are positive; capacity repair is then left to the score and to
+local search.
+
+### Capacity-aware Clarke-Wright construction
+
+`capacity_savings_hooks` is an opt-in alternative to `savings_hooks` that
+keeps savings merges within the owner's capacity, as in classical
+Clarke-Wright. The `domain = "cvrp"` profile does not accept a different
+`savings_hooks` path, so spell out the stock pieces explicitly:
+
+```rust
+#[planning_list_variable(
+    element_collection = "deliveries",
+    solution_trait = "::solverforge::cvrp::VrpSolution",
+    distance_meter = "::solverforge::cvrp::MatrixDistanceMeter",
+    intra_distance_meter = "::solverforge::cvrp::MatrixIntraDistanceMeter",
+    route_hooks = "::solverforge::cvrp::route_hooks",
+    savings_hooks = "::solverforge::cvrp::capacity_savings_hooks",
+    savings_metric_class_fn = "::solverforge::cvrp::savings_metric_class"
+)]
+```
+
+The capacity gate applies to every Clarke-Wright candidate route, including
+completion insertion. When the fleet cannot hold all demand, or its capacity
+is too tight for the savings routes to be packed onto the available owners,
+Clarke-Wright finds no complete admissible assignment and the solve reports
+incomplete mandatory list work. Use the relaxed stock profile for such
+fleets.
 
 ### Advanced macro hook bundles
 
@@ -106,12 +136,15 @@ Public hook modules:
 
 - `route_hooks` — exports `get`, `set`, `depot`, `distance`, and `feasible`
 - `savings_hooks` — exports `depot`, `distance`, and `feasible`
+- `capacity_savings_hooks` — exports `depot`, `distance`, and `feasible`
+  (`savings_capacity_feasible`)
 
 `route_hooks` exports `get`, `set`, `depot`, `distance`, and `feasible` for
 route-local behavior, including strict CVRP capacity and time-window checks.
 `savings_hooks` exports `depot`, `distance`, and `feasible` for Clarke-Wright
 construction when that construction metric shares stock CVRP data; its
 feasibility hook rejects malformed owners/data/visit ids but admits scoreable
-capacity and time-window violations. Custom hook modules are the advanced
+capacity and time-window violations. `capacity_savings_hooks` shares the same
+depot and distance but bounds construction routes by capacity. Custom hook modules are the advanced
 escape hatch for non-CVRP route semantics or different pruning policies; use
 them by omitting `domain = "cvrp"` and declaring explicit macro hook paths.

@@ -408,3 +408,64 @@ fn distance_meters_treat_unreachable_legs_as_infinite() {
         .distance(&solution, 0, 0, 0, 1)
         .is_infinite());
 }
+
+#[test]
+fn capacity_savings_feasibility_bounds_merges_by_capacity() {
+    let mut owner_one_data = base_problem_data();
+    owner_one_data.capacity = 4;
+    let solution = TestSolution::with_data(
+        vec![vec![1, 2], vec![3]],
+        vec![base_problem_data(), owner_one_data],
+    );
+
+    assert!(savings_capacity_feasible(&solution, 0, &[1, 2]));
+    assert!(
+        !savings_capacity_feasible(&solution, 1, &[1, 2]),
+        "capacity-aware savings must reject over-capacity merged routes"
+    );
+    assert!(!capacity_savings_hooks::feasible(&solution, 1, &[1, 2]));
+    assert!(
+        savings_capacity_feasible(&solution, 1, &[3]),
+        "a single visit cannot be split, so its demand stays scoreable"
+    );
+    assert!(savings_capacity_feasible(&solution, 1, &[]));
+}
+
+#[test]
+fn capacity_savings_feasibility_keeps_time_windows_scoreable() {
+    let solution = TestSolution::new(vec![vec![1, 2], vec![3]]);
+
+    assert!(!route_feasible(&solution, 0, &[2, 3]));
+    assert!(savings_capacity_feasible(&solution, 0, &[2, 3]));
+}
+
+#[test]
+fn capacity_savings_feasibility_rejects_structurally_invalid_routes() {
+    let solution = TestSolution::new(vec![vec![1, 2], vec![3]]);
+    let null_data = NullDataSolution {
+        routes: vec![vec![1, 2]],
+    };
+
+    assert!(!savings_capacity_feasible(&solution, 0, &[4]));
+    assert!(!savings_capacity_feasible(&solution, 2, &[1]));
+    assert!(!savings_capacity_feasible(&null_data, 0, &[1]));
+    assert!(savings_capacity_feasible(&null_data, 0, &[]));
+}
+
+#[test]
+fn capacity_savings_hook_bundle_shares_stock_savings_metric() {
+    let solution = TestSolution::new(vec![vec![1, 2], vec![3]]);
+
+    assert_eq!(
+        capacity_savings_hooks::depot(&solution, 0),
+        savings_hooks::depot(&solution, 0)
+    );
+    assert_eq!(
+        capacity_savings_hooks::distance(&solution, 0, 1, 2),
+        savings_hooks::distance(&solution, 0, 1, 2)
+    );
+    assert_eq!(
+        capacity_savings_hooks::feasible(&solution, 0, &[1, 2]),
+        savings_capacity_feasible(&solution, 0, &[1, 2])
+    );
+}
