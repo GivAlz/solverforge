@@ -341,6 +341,12 @@ Target-bearing leaf structs store `target: VariableTargetConfig`. That field is
 `target` field. `GroupedScalarMoveSelectorConfig` and the two conflict-repair
 leaf configs do not have a variable target.
 
+Every key listed below with a default value may be omitted from TOML or YAML;
+the omitted key takes the value from the table (the type's `Default`), so a
+leaf selector without required keys parses from `type = "..."` alone. Keys
+marked required (`group_name`, conflict-repair `constraints`) and the composite
+`selected_count_limit`, `selector`, and `selectors` keys must be present.
+
 `SelectionOrder` variants are `Original` (default), `Random`, `Shuffled`,
 `Sorted`, and `Probabilistic`. `is_random()` identifies the seeded random
 families; `requires_complete_stream()` is true for sorted and probabilistic
@@ -631,7 +637,7 @@ Derives: `Debug, Clone, Deserialize, Serialize, PartialEq, Eq`. Manual `Default`
 
 | Field | Type | Default |
 |-------|------|---------|
-| `constraints` | `Vec<String>` | `[]` |
+| `constraints` | `Vec<String>` | required in TOML/YAML (`Default` uses `[]`) |
 | `max_matches_per_step` | `usize` | `16` |
 | `max_repairs_per_match` | `usize` | `32` |
 | `max_moves_per_step` | `usize` | `256` |
@@ -651,7 +657,7 @@ Derives: `Debug, Clone, Deserialize, Serialize, PartialEq, Eq`. Manual `Default`
 
 | Field | Type | Default |
 |-------|------|---------|
-| `constraints` | `Vec<String>` | `[]` |
+| `constraints` | `Vec<String>` | required in TOML/YAML (`Default` uses `[]`) |
 | `max_matches_per_step` | `usize` | `16` |
 | `max_repairs_per_match` | `usize` | `32` |
 | `max_moves_per_step` | `usize` | `256` |
