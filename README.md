@@ -132,7 +132,10 @@ and `MoveSelector`.
   stock CVRP distance meters plus split route/savings hooks. Route-local phases
   use strict capacity, time-window, and unreachable-leg feasibility;
   Clarke-Wright construction uses relaxed savings admissibility so assignment
-  remains score-comparable.
+  remains score-comparable; merges are therefore not capacity-bounded. Declare
+  the stock pieces explicitly with
+  `savings_hooks = "::solverforge::cvrp::capacity_savings_hooks"` for
+  classical capacity-bounded savings routes on fleets with enough capacity.
 - **Configuration**: TOML/YAML support with builder APIs, bounded candidate tracing, per-selector ordering and host metrics, weighted union scheduling, score tie-breaking, grouped scalar and conflict-repair selectors, and level-aware simulated annealing configuration
 - **Console Output**: Colorful tracing-based progress display with solve telemetry
 

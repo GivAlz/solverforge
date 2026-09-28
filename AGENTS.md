@@ -223,7 +223,19 @@ semantics:
 - `savings_hooks::feasible` / `savings_feasible` are Clarke-Wright construction
   admissibility gates and should reject only routes that cannot be evaluated
   safely by stock CVRP data. Capacity and time-window violations remain
-  scoreable during construction.
+  scoreable during construction, so the stock profile always reaches a
+  complete assignment even when the fleet cannot hold all demand. The cost is
+  that stock savings merges are not bounded by capacity: with positive savings
+  Clarke-Wright tends to build one long route and leaves capacity repair to
+  the score and local search.
+- `capacity_savings_hooks` / `savings_capacity_feasible` are the opt-in
+  capacity-aware Clarke-Wright gate: structural rejection plus rejection of
+  multi-visit routes over the owner's capacity (single visits and time windows
+  stay scoreable). They give classical capacity-bounded savings routes but
+  can leave no complete admissible assignment for tight or over-constrained
+  fleets, which fails the solve with incomplete mandatory list work. Keep
+  this gate opt-in; do not make it the `domain = "cvrp"` default without a
+  separate relaxed completion gate in the Clarke-Wright kernel.
 - Custom routing domains should omit `domain = "cvrp"` and provide explicit
   `route_hooks` / `savings_hooks`; do not add compatibility aliases around the
   profile defaults.

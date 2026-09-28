@@ -199,9 +199,9 @@ Module: `solverforge::cvrp`
 - `MatrixDistanceMeter`
 - `MatrixIntraDistanceMeter`
 - `replace_route`, `get_route`
-- hook modules: `route_hooks`, `savings_hooks`
+- hook modules: `route_hooks`, `savings_hooks`, `capacity_savings_hooks`
 - route-local helpers: `depot_for_entity`, `route_distance`, `route_feasible`
-- Clarke-Wright construction adapters: `savings_depot_for_entity`, `savings_metric_class`, `savings_distance`, `savings_feasible`
+- Clarke-Wright construction adapters: `savings_depot_for_entity`, `savings_metric_class`, `savings_distance`, `savings_feasible`, `savings_capacity_feasible`
 
 Stock CVRP route lists should normally use
 `#[planning_list_variable(element_collection = "...", domain = "cvrp")]`. The
@@ -210,7 +210,8 @@ construction/local-search split out of ordinary model code: route hooks enforce
 strict route-local CVRP capacity and time-window feasibility, while savings
 hooks provide relaxed Clarke-Wright construction admissibility. Explicit hook
 modules remain available for custom routing semantics when the `domain = "cvrp"`
-profile is omitted.
+profile is omitted; `capacity_savings_hooks` is the stock opt-in bundle for
+capacity-bounded Clarke-Wright routes.
 
 ### Console (feature-gated)
 

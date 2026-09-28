@@ -86,6 +86,32 @@ pub fn savings_feasible<S: VrpSolution>(plan: &S, entity_idx: usize, route: &[us
     route_is_structurally_valid(route, data)
 }
 
+/// Capacity-aware construction admissibility for Clarke-Wright.
+///
+/// Rejects everything [`savings_feasible`] rejects, plus any route with more
+/// than one visit whose total demand exceeds the owner's capacity, so savings
+/// merges stay capacity-bounded. A single visit is always admitted when it is
+/// structurally valid: it cannot be split further, so its own over-capacity
+/// demand stays scoreable. Time-window violations stay scoreable.
+///
+/// Unlike the stock [`savings_feasible`] gate, this gate can leave Clarke-Wright
+/// without any complete admissible assignment when the fleet cannot hold all
+/// demand; the solve then reports mandatory list work as incomplete.
+pub fn savings_capacity_feasible<S: VrpSolution>(
+    plan: &S,
+    entity_idx: usize,
+    route: &[usize],
+) -> bool {
+    if route.is_empty() {
+        return true;
+    }
+    let Some(data) = optional_problem_data_for_entity(plan, entity_idx) else {
+        return false;
+    };
+    route_is_structurally_valid(route, data)
+        && (route.len() == 1 || route_is_capacity_feasible(route, data))
+}
+
 /// Distance between two element indices for the route owner.
 pub fn route_distance<S: VrpSolution>(plan: &S, entity_idx: usize, from: usize, to: usize) -> i64 {
     problem_data_for_entity(plan, entity_idx).map_or(0, |data| data.distance_cost(from, to))
@@ -135,6 +161,17 @@ pub mod savings_hooks {
     pub use super::savings_depot_for_entity as depot;
     pub use super::savings_distance as distance;
     pub use super::savings_feasible as feasible;
+}
+
+/// Capacity-aware Clarke-Wright savings hook bundle.
+///
+/// Opt-in alternative to [`savings_hooks`] for explicit macro declarations:
+/// shares its depot and distance, but gates construction with
+/// [`savings_capacity_feasible`].
+pub mod capacity_savings_hooks {
+    pub use super::savings_capacity_feasible as feasible;
+    pub use super::savings_depot_for_entity as depot;
+    pub use super::savings_distance as distance;
 }
 
 fn route_is_structurally_valid(route: &[usize], data: &ProblemData) -> bool {

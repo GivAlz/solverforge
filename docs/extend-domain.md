@@ -46,7 +46,15 @@ Use the scaffold as a thin starter, then model the real problem in your app.
   internally. Route-local phases use strict stock CVRP capacity and time-window
   feasibility, while Clarke-Wright construction uses relaxed savings
   feasibility so the score model can compare capacity, lateness, travel-time,
-  and unassigned penalties after assignment.
+  and unassigned penalties after assignment. Relaxed savings merges are not
+  bounded by capacity, so stock Clarke-Wright often starts from one long
+  route.
+- For capacity-bounded Clarke-Wright routes, omit `domain = "cvrp"` and declare
+  the stock pieces explicitly with
+  `savings_hooks = "::solverforge::cvrp::capacity_savings_hooks"` (see the
+  `solverforge-cvrp` wireframe for the full attribute list). This gate cannot
+  complete construction when the fleet cannot hold all demand, so keep the
+  relaxed profile for tight or over-constrained fleets.
 - Omit `domain = "cvrp"` and use explicit `route_hooks = "path"` and
   `savings_hooks = "path"` only for custom routing domains or strict pruning
   policies. The route-local module must export `get`, `set`, `depot`,
