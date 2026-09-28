@@ -373,7 +373,8 @@ src/
 │   ├── solver/scope_progress.rs         — SolverScope score/best-solution/progress/stat reporting helpers
 │   ├── phase.rs                         — PhaseScope<'t, 'a, S, D, BestCb = ()>
 │   ├── step.rs                          — StepScope<'t, 'a, 'b, S, D, BestCb = ()>
-│   └── tests.rs                         — Tests
+│   ├── tests.rs                         — Tests
+│   └── tests/best_score_limit.rs        — Best-score limits judge only complete solutions
 │
 ├── termination/
 │   ├── mod.rs                           — Termination<S, D, BestCb = ()> trait, re-exports
@@ -1384,7 +1385,10 @@ groups may remain unassigned only when their slot declares that capability.
 Local search cannot start before this gate passes. Config or phase termination
 with unresolved mandatory work travels through `RuntimeBuildError::Execution`
 and the existing `Failed` manager lifecycle, without a `BestSolution`, completed
-snapshot, or partial paused snapshot.
+snapshot, or partial paused snapshot. Best-score limits (`BestScoreTermination`,
+`BestScoreFeasibleTermination`, and solver or phase `best_score_limit`) judge
+only the best score of a complete solution: while best-solution publication is
+deferred, a partial construction score never satisfies them.
 
 ## Termination Types
 

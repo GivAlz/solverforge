@@ -400,3 +400,5 @@ fn solver_scope_forwards_candidate_trace_plan_finalization() {
     assert_eq!(trace.header.resolved_phase_plan, terminal_plan);
     assert!(trace.header.resolved_phase_plan_complete);
 }
+
+mod best_score_limit;

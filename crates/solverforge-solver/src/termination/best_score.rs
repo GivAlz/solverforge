@@ -12,6 +12,9 @@ use crate::scope::SolverScope;
 
 /* Terminates when the best score reaches or exceeds a target score.
 
+Only the best score of a complete solution counts: while mandatory
+construction work is unresolved, the limit never ends the solve.
+
 This is useful when you know what score you're aiming for (e.g., a perfect
 score of 0 for constraint satisfaction problems).
 
@@ -45,7 +48,7 @@ where
 {
     fn is_terminated(&self, solver_scope: &SolverScope<S, D, BestCb>) -> bool {
         solver_scope
-            .best_score()
+            .complete_best_score()
             .map(|score| *score >= self.target_score)
             .unwrap_or(false)
     }
@@ -56,6 +59,8 @@ where
 }
 
 /// Terminates when the best score becomes feasible.
+///
+/// Like [`BestScoreTermination`], it only judges complete solutions.
 ///
 /// A score is considered feasible when it meets a feasibility check defined
 /// by a user-provided function. For HardSoftScore, this typically means
@@ -115,7 +120,7 @@ where
 {
     fn is_terminated(&self, solver_scope: &SolverScope<S, D, BestCb>) -> bool {
         solver_scope
-            .best_score()
+            .complete_best_score()
             .map(|score| (self.feasibility_check)(score))
             .unwrap_or(false)
     }

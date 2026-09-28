@@ -1,0 +1,6 @@
+environment_mode = "reproducible"
+random_seed = 7
+
+[termination]
+seconds_spent_limit = 30
+best_score_limit = "0hard/-1000000soft"
