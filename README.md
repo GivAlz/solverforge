@@ -543,6 +543,12 @@ unimproved_seconds_spent_limit = 5
 step_count_limit = 10000
 ```
 
+`seconds_spent_limit`, `minutes_spent_limit`, and
+`unimproved_seconds_spent_limit` accept fractional values such as
+`seconds_spent_limit = 1.5`, both at the top level and in a phase's
+`termination` table. Negative, NaN, and infinite time limits are rejected when
+the configuration loads.
+
 Or programmatically:
 
 ```rust
@@ -566,6 +572,8 @@ fn solver_config_for_solution(solution: &Schedule, config: SolverConfig) -> Solv
     config.with_termination_seconds(solution.time_limit_secs)
 }
 ```
+
+Use `with_termination_time_limit(Duration)` for sub-second programmatic budgets.
 
 Configured termination limits always remain binding, including during required
 scalar and list construction. A configured solve publishes a best solution only

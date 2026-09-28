@@ -82,9 +82,15 @@ impl SolverConfig {
         Ok(serde_yaml::from_str(s)?)
     }
 
-    pub fn with_termination_seconds(mut self, seconds: u64) -> Self {
+    /// Sets `seconds_spent_limit` to a whole number of seconds.
+    pub fn with_termination_seconds(self, seconds: u64) -> Self {
+        self.with_termination_time_limit(Duration::from_secs(seconds))
+    }
+
+    /// Sets `seconds_spent_limit` to `limit`, including sub-second budgets.
+    pub fn with_termination_time_limit(mut self, limit: Duration) -> Self {
         self.termination = Some(TerminationConfig {
-            seconds_spent_limit: Some(seconds),
+            seconds_spent_limit: Some(limit.as_secs_f64()),
             ..self.termination.unwrap_or_default()
         });
         self

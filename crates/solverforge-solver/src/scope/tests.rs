@@ -127,7 +127,7 @@ fn scoped_phase_termination_is_relative_complete_and_restored() {
             ..TerminationConfig::default()
         },
         TerminationConfig {
-            unimproved_seconds_spent_limit: Some(0),
+            unimproved_seconds_spent_limit: Some(0.0),
             ..TerminationConfig::default()
         },
     ] {
@@ -143,7 +143,7 @@ fn scoped_phase_termination_is_relative_complete_and_restored() {
     }
 
     let time_limited = TerminationConfig {
-        seconds_spent_limit: Some(1),
+        seconds_spent_limit: Some(1.0),
         ..TerminationConfig::default()
     };
     scope.with_phase_termination(Some(&time_limited), |scope| {
