@@ -1541,11 +1541,21 @@ moves accepted, moves applied, score calculations, elapsed time, generation
 time, evaluation time, acceptance rate, selector-level telemetry, and exact
 `Throughput { count, elapsed }` views for generated/evaluated work.
 Human-facing `moves/s` is derived only at log/console formatting edges.
+`moves_evaluated` totals every phase. `SolverStats::construction_moves_evaluated`
+is the part of it made inside construction-heuristic phases (every phase run
+through the shared construction lifecycle, including list Clarke-Wright and
+list K-opt), and `construction_time()` is the solve-clock time spent in those
+phases. `search_moves_evaluated()` and `search_evaluated_throughput()` exclude
+that construction work; the `solve_end` event's `moves_speed` is derived from
+`search_evaluated_throughput()`, so a solve without search phases reports
+`0` moves/s instead of a construction-inflated rate.
 `moves_generated` counts candidates actually yielded by a runtime cursor; it
 does not count an unrequested logical tail. Selector `size()` and explicit full
 cursor exhaustion cover logical neighborhood size and canonical order.
 
-`SolverTelemetry` snapshots expose the same counters plus an optional
+`SolverTelemetry` snapshots expose the same counters (including
+`construction_moves_evaluated`, `construction_time`, and
+`search_moves_evaluated()`) plus an optional
 `PhaseTelemetry` snapshot identifying the active phase and its local elapsed,
 step, move, score-calculation, generation-time, and evaluation-time counters;
 not-doable,

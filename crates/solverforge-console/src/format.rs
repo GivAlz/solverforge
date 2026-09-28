@@ -104,6 +104,7 @@ fn format_solve_end(v: &EventVisitor) -> String {
     let moves_speed = v.moves_speed.or(v.speed).unwrap_or(0);
     let moves_generated = v.moves_generated.unwrap_or(0);
     let moves_evaluated = v.moves_evaluated.unwrap_or(0);
+    let construction_moves_evaluated = v.construction_moves_evaluated.unwrap_or(0);
     let moves_accepted = v.moves_accepted.unwrap_or(0);
     let score_calculations = v.score_calculations.unwrap_or(0);
     let acceptance_rate = v.acceptance_rate.as_deref().unwrap_or("0.0%");
@@ -167,90 +168,53 @@ fn format_solve_end(v: &EventVisitor) -> String {
     );
     output.push('\n');
 
-    output.push_str(&format!(
-        "{}  {:<18}{:>36}  {}",
-        "║".bright_cyan(),
-        "Final Score:",
-        score,
-        "║".bright_cyan()
-    ));
-    output.push('\n');
-    output.push_str(&format!(
-        "{}  {:<18}{:>36}  {}",
-        "║".bright_cyan(),
+    summary_row(&mut output, "Final Score:", score);
+    summary_row(
+        &mut output,
         "Moves Generated:",
-        moves_generated.to_formatted_string(&Locale::en),
-        "║".bright_cyan()
-    ));
-    output.push('\n');
-    output.push_str(&format!(
-        "{}  {:<18}{:>36}  {}",
-        "║".bright_cyan(),
+        &moves_generated.to_formatted_string(&Locale::en),
+    );
+    summary_row(
+        &mut output,
         "Steps:",
-        steps.to_formatted_string(&Locale::en),
-        "║".bright_cyan()
-    ));
-    output.push('\n');
+        &steps.to_formatted_string(&Locale::en),
+    );
     if let Some(generation_time) = generation_time {
-        output.push_str(&format!(
-            "{}  {:<18}{:>36}  {}",
-            "║".bright_cyan(),
-            "Generation Time:",
-            generation_time,
-            "║".bright_cyan()
-        ));
-        output.push('\n');
+        summary_row(&mut output, "Generation Time:", generation_time);
     }
     if let Some(evaluation_time) = evaluation_time {
-        output.push_str(&format!(
-            "{}  {:<18}{:>36}  {}",
-            "║".bright_cyan(),
-            "Evaluation Time:",
-            evaluation_time,
-            "║".bright_cyan()
-        ));
-        output.push('\n');
+        summary_row(&mut output, "Evaluation Time:", evaluation_time);
     }
-    output.push_str(&format!(
-        "{}  {:<18}{:>36}  {}",
-        "║".bright_cyan(),
+    summary_row(
+        &mut output,
         "Moves/s:",
-        moves_speed.to_formatted_string(&Locale::en),
-        "║".bright_cyan()
-    ));
-    output.push('\n');
-    output.push_str(&format!(
-        "{}  {:<18}{:>36}  {}",
-        "║".bright_cyan(),
+        &moves_speed.to_formatted_string(&Locale::en),
+    );
+    summary_row(
+        &mut output,
         "Moves Evaluated:",
-        moves_evaluated.to_formatted_string(&Locale::en),
-        "║".bright_cyan()
-    ));
-    output.push('\n');
-    output.push_str(&format!(
-        "{}  {:<18}{:>36}  {}",
-        "║".bright_cyan(),
+        &moves_evaluated.to_formatted_string(&Locale::en),
+    );
+    // `Moves/s` covers search phases only; construction evaluations are
+    // broken out here instead of inflating the headline rate.
+    if construction_moves_evaluated > 0 {
+        summary_row(
+            &mut output,
+            "  in Construction:",
+            &construction_moves_evaluated.to_formatted_string(&Locale::en),
+        );
+    }
+    summary_row(
+        &mut output,
         "Moves Accepted:",
-        moves_accepted.to_formatted_string(&Locale::en),
-        "║".bright_cyan()
-    ));
-    output.push('\n');
-    output.push_str(&format!(
-        "{}  {:<18}{:>36}  {}",
-        "║".bright_cyan(),
+        &moves_accepted.to_formatted_string(&Locale::en),
+    );
+    summary_row(
+        &mut output,
         "Score Calcs:",
-        score_calculations.to_formatted_string(&Locale::en),
-        "║".bright_cyan()
-    ));
-    output.push('\n');
-    output.push_str(&format!(
-        "{}  {:<18}{:>36}  {}",
-        "║".bright_cyan(),
-        "Acceptance:",
-        acceptance_rate,
-        "║".bright_cyan()
-    ));
-    output.push('\n');
+        &score_calculations.to_formatted_string(&Locale::en),
+    );
+    summary_row(&mut output, "Acceptance:", acceptance_rate);
 
     output.push_str(
         &"╚══════════════════════════════════════════════════════════╝"
@@ -260,6 +224,17 @@ fn format_solve_end(v: &EventVisitor) -> String {
     output.push('\n');
 
     output
+}
+
+fn summary_row(output: &mut String, label: &str, value: &str) {
+    output.push_str(&format!(
+        "{}  {:<18}{:>36}  {}",
+        "║".bright_cyan(),
+        label,
+        value,
+        "║".bright_cyan()
+    ));
+    output.push('\n');
 }
 
 fn format_phase_start(v: &EventVisitor) -> String {

@@ -40,6 +40,8 @@ pub struct PhaseScope<'t, 'a, S: PlanningSolution, D: Director<S>, BestCb = ()> 
     solver_elapsed_at_start: Option<Duration>,
     // Phase statistics.
     stats: PhaseStats,
+    // Construction evaluations are also counted apart at solver level.
+    construction: bool,
 }
 
 impl<'t, 'a, S: PlanningSolution, D: Director<S>, BestCb: ProgressCallback<S>>
@@ -59,6 +61,7 @@ impl<'t, 'a, S: PlanningSolution, D: Director<S>, BestCb: ProgressCallback<S>>
             start_time: Instant::now(),
             solver_elapsed_at_start,
             stats: PhaseStats::new(phase_index, "Unknown"),
+            construction: false,
         }
     }
 
@@ -80,7 +83,20 @@ impl<'t, 'a, S: PlanningSolution, D: Director<S>, BestCb: ProgressCallback<S>>
             start_time: Instant::now(),
             solver_elapsed_at_start,
             stats: PhaseStats::new(phase_index, phase_type),
+            construction: false,
         }
+    }
+
+    /// Opens the scope of a construction-heuristic phase, whose candidate
+    /// evaluations the solver also counts as `construction_moves_evaluated`.
+    pub(crate) fn construction(
+        solver_scope: &'a mut SolverScope<'t, S, D, BestCb>,
+        phase_index: usize,
+        phase_type: &'static str,
+    ) -> Self {
+        let mut phase_scope = Self::with_phase_type(solver_scope, phase_index, phase_type);
+        phase_scope.construction = true;
+        phase_scope
     }
 
     pub fn phase_index(&self) -> usize {
@@ -261,6 +277,7 @@ impl<'t, 'a, S: PlanningSolution, D: Director<S>, BestCb: ProgressCallback<S>>
     pub fn record_evaluated_move(&mut self, duration: Duration) {
         self.stats.record_evaluated_move(duration);
         self.solver_scope.record_evaluated_move(duration);
+        self.record_construction_evaluation();
     }
 
     pub fn record_selector_evaluated_move(&mut self, selector_index: usize, duration: Duration) {
@@ -268,6 +285,15 @@ impl<'t, 'a, S: PlanningSolution, D: Director<S>, BestCb: ProgressCallback<S>>
             .record_selector_evaluated(selector_index, duration);
         self.solver_scope
             .record_selector_evaluated(selector_index, duration);
+        self.record_construction_evaluation();
+    }
+
+    fn record_construction_evaluation(&mut self) {
+        if self.construction {
+            self.solver_scope
+                .stats_mut()
+                .record_construction_move_evaluated();
+        }
     }
 
     pub fn record_move_accepted(&mut self) {

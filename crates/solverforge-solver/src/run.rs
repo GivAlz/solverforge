@@ -603,7 +603,8 @@ where
         stats,
     } = result;
     let final_telemetry = stats.snapshot();
-    let final_move_speed = whole_units_per_second(stats.moves_evaluated, stats.elapsed());
+    let search = stats.search_evaluated_throughput();
+    let final_move_speed = whole_units_per_second(search.count, search.elapsed);
     match terminal_reason {
         SolverTerminalReason::Completed | SolverTerminalReason::TerminatedByConfig => {
             runtime.emit_completed(
@@ -633,6 +634,7 @@ where
         steps = stats.step_count,
         moves_generated = stats.moves_generated,
         moves_evaluated = stats.moves_evaluated,
+        construction_moves_evaluated = stats.construction_moves_evaluated,
         moves_accepted = stats.moves_accepted,
         score_calculations = stats.score_calculations,
         generation_time = %format_duration(stats.generation_time()),
