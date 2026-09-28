@@ -137,8 +137,7 @@ fn test_unimproved_step_count_termination_with_improvement() {
         },
         SoftScore::of(-5),
     );
-    scope.increment_step_count();
-    assert!(!term.is_terminated(&scope)); // Reset counter due to improvement
+    assert!(!term.is_terminated(&scope)); // Improvement restarts the count
 
     // Now count again from improvement
     scope.increment_step_count();
@@ -147,6 +146,60 @@ fn test_unimproved_step_count_termination_with_improvement() {
     assert!(!term.is_terminated(&scope));
     scope.increment_step_count();
     assert!(term.is_terminated(&scope)); // 3 steps since improvement
+}
+
+#[test]
+fn unimproved_step_count_limit_is_installed_as_inphase_limit() {
+    let mut scope = create_scope_with_score(SoftScore::of(-10));
+    let term = UnimprovedStepCountTermination::<TestSolution>::new(3);
+    term.install_inphase_limits(&mut scope);
+
+    scope.increment_step_count();
+    scope.increment_step_count();
+    assert!(!scope.should_terminate());
+
+    // A new best solution restarts the unimproved window.
+    scope.set_best_solution(
+        TestSolution::with_score(SoftScore::of(-5)),
+        SoftScore::of(-5),
+    );
+    scope.increment_step_count();
+    scope.increment_step_count();
+    assert!(!scope.should_terminate());
+    scope.increment_step_count();
+    assert!(scope.should_terminate());
+    assert_eq!(
+        scope.terminal_reason(),
+        crate::manager::SolverTerminalReason::TerminatedByConfig
+    );
+}
+
+#[test]
+fn unimproved_limits_do_not_count_construction_work() {
+    let mut scope = create_scope_with_score(SoftScore::of(-10));
+    let steps = UnimprovedStepCountTermination::<TestSolution>::new(2);
+    let time = UnimprovedTimeTermination::<TestSolution>::new(Duration::ZERO);
+    steps.install_inphase_limits(&mut scope);
+
+    // Construction steps rarely improve the best score, but construction work
+    // must never be cut short by the unimproved limits.
+    for _ in 0..5 {
+        assert!(!scope.should_terminate_construction());
+        scope.increment_step_count();
+    }
+    assert!(!scope.should_terminate_construction());
+    assert!(!steps.is_terminated(&scope));
+
+    // The unimproved window restarts where construction work stopped.
+    assert!(!scope.should_terminate());
+    scope.increment_step_count();
+    assert!(!scope.should_terminate());
+    scope.increment_step_count();
+    assert!(steps.is_terminated(&scope));
+    assert!(scope.should_terminate());
+
+    time.install_inphase_limits(&mut scope);
+    assert!(time.is_terminated(&scope));
 }
 
 #[test]

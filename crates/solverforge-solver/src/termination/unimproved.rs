@@ -1,12 +1,10 @@
 // Termination conditions based on lack of improvement.
 
-use std::cell::RefCell;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::time::Duration;
 
 use solverforge_core::domain::PlanningSolution;
-use solverforge_core::score::Score;
 use solverforge_scoring::Director;
 
 use super::Termination;
@@ -16,7 +14,10 @@ use crate::scope::SolverScope;
 /// Terminates if no improvement occurs for a specified number of steps.
 ///
 /// This is useful to avoid spending too much time when the solver has
-/// plateaued and is unlikely to find better solutions.
+/// plateaued and is unlikely to find better solutions. The count covers steps
+/// completed since the best solution last improved. The limit is also
+/// installed as an in-phase limit, so it stops search phases between steps;
+/// construction work restarts the count instead of being cut short by it.
 ///
 /// # Example
 ///
@@ -38,34 +39,14 @@ use crate::scope::SolverScope;
 /// ```
 pub struct UnimprovedStepCountTermination<S: PlanningSolution> {
     limit: u64,
-    state: RefCell<UnimprovedState<S::Score>>,
     _phantom: PhantomData<fn() -> S>,
 }
 
 impl<S: PlanningSolution> Debug for UnimprovedStepCountTermination<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let state = self.state.borrow();
         f.debug_struct("UnimprovedStepCountTermination")
             .field("limit", &self.limit)
-            .field("steps_since_improvement", &state.steps_since_improvement)
             .finish()
-    }
-}
-
-#[derive(Clone)]
-struct UnimprovedState<Sc: Score> {
-    last_best_score: Option<Sc>,
-    steps_since_improvement: u64,
-    last_checked_step: Option<u64>,
-}
-
-impl<Sc: Score> Default for UnimprovedState<Sc> {
-    fn default() -> Self {
-        Self {
-            last_best_score: None,
-            steps_since_improvement: 0,
-            last_checked_step: None,
-        }
     }
 }
 
@@ -73,57 +54,20 @@ impl<S: PlanningSolution> UnimprovedStepCountTermination<S> {
     pub fn new(limit: u64) -> Self {
         Self {
             limit,
-            state: RefCell::new(UnimprovedState::default()),
             _phantom: PhantomData,
         }
     }
 }
 
-// Safety: The RefCell is only accessed from within is_terminated,
-// which is called from a single thread during solving.
-unsafe impl<S: PlanningSolution> Send for UnimprovedStepCountTermination<S> {}
-
 impl<S: PlanningSolution, D: Director<S>, BestCb: ProgressCallback<S>> Termination<S, D, BestCb>
     for UnimprovedStepCountTermination<S>
 {
     fn is_terminated(&self, solver_scope: &SolverScope<S, D, BestCb>) -> bool {
-        let mut state = self.state.borrow_mut();
-        let current_step = solver_scope.total_step_count();
+        solver_scope.best_score().is_some() && solver_scope.unimproved_step_count() >= self.limit
+    }
 
-        // Avoid rechecking on the same step
-        if state.last_checked_step == Some(current_step) {
-            return state.steps_since_improvement >= self.limit;
-        }
-        state.last_checked_step = Some(current_step);
-
-        let current_best = solver_scope.best_score();
-
-        match (&state.last_best_score, current_best) {
-            (None, Some(score)) => {
-                // First score recorded
-                state.last_best_score = Some(*score);
-                state.steps_since_improvement = 0;
-            }
-            (Some(last), Some(current)) => {
-                if *current > *last {
-                    // Improvement found
-                    state.last_best_score = Some(*current);
-                    state.steps_since_improvement = 0;
-                } else {
-                    // No improvement
-                    state.steps_since_improvement += 1;
-                }
-            }
-            (Some(_), None) => {
-                // Score became unavailable (shouldn't happen normally)
-                state.steps_since_improvement += 1;
-            }
-            (None, None) => {
-                // No score yet
-            }
-        }
-
-        state.steps_since_improvement >= self.limit
+    fn install_inphase_limits(&self, solver_scope: &mut SolverScope<S, D, BestCb>) {
+        solver_scope.install_inphase_unimproved_step_count_limit(self.limit);
     }
 }
 
@@ -131,6 +75,10 @@ impl<S: PlanningSolution, D: Director<S>, BestCb: ProgressCallback<S>> Terminati
 ///
 /// This is useful for time-boxed optimization where you want to ensure
 /// progress is being made, but also allow more time if improvements are found.
+/// The duration is pause-aware solver time since the best solution last
+/// improved. Like [`UnimprovedStepCountTermination`], the limit is installed as
+/// an in-phase limit checked between search steps, and construction work
+/// restarts the window instead of being cut short by it.
 ///
 /// # Example
 ///
@@ -153,7 +101,6 @@ impl<S: PlanningSolution, D: Director<S>, BestCb: ProgressCallback<S>> Terminati
 /// ```
 pub struct UnimprovedTimeTermination<S: PlanningSolution> {
     limit: Duration,
-    state: RefCell<UnimprovedTimeState<S::Score>>,
     _phantom: PhantomData<fn() -> S>,
 }
 
@@ -165,25 +112,10 @@ impl<S: PlanningSolution> Debug for UnimprovedTimeTermination<S> {
     }
 }
 
-struct UnimprovedTimeState<Sc: Score> {
-    last_best_score: Option<Sc>,
-    last_improvement_elapsed: Option<Duration>,
-}
-
-impl<Sc: Score> Default for UnimprovedTimeState<Sc> {
-    fn default() -> Self {
-        Self {
-            last_best_score: None,
-            last_improvement_elapsed: None,
-        }
-    }
-}
-
 impl<S: PlanningSolution> UnimprovedTimeTermination<S> {
     pub fn new(limit: Duration) -> Self {
         Self {
             limit,
-            state: RefCell::new(UnimprovedTimeState::default()),
             _phantom: PhantomData,
         }
     }
@@ -197,50 +129,14 @@ impl<S: PlanningSolution> UnimprovedTimeTermination<S> {
     }
 }
 
-// Safety: The RefCell is only accessed from within is_terminated,
-// which is called from a single thread during solving.
-unsafe impl<S: PlanningSolution> Send for UnimprovedTimeTermination<S> {}
-
 impl<S: PlanningSolution, D: Director<S>, BestCb: ProgressCallback<S>> Termination<S, D, BestCb>
     for UnimprovedTimeTermination<S>
 {
     fn is_terminated(&self, solver_scope: &SolverScope<S, D, BestCb>) -> bool {
-        let mut state = self.state.borrow_mut();
-        let current_best = solver_scope.best_score();
-        let now = solver_scope.elapsed().unwrap_or_default();
+        solver_scope.best_score().is_some() && solver_scope.unimproved_time() >= self.limit
+    }
 
-        match (&state.last_best_score, current_best) {
-            (None, Some(score)) => {
-                // First score recorded
-                state.last_best_score = Some(*score);
-                state.last_improvement_elapsed = Some(now);
-                false
-            }
-            (Some(last), Some(current)) => {
-                if *current > *last {
-                    // Improvement found
-                    state.last_best_score = Some(*current);
-                    state.last_improvement_elapsed = Some(now);
-                    false
-                } else {
-                    // No improvement - check time
-                    state
-                        .last_improvement_elapsed
-                        .map(|t| now.saturating_sub(t) >= self.limit)
-                        .unwrap_or(false)
-                }
-            }
-            (Some(_), None) => {
-                // Score became unavailable
-                state
-                    .last_improvement_elapsed
-                    .map(|t| now.saturating_sub(t) >= self.limit)
-                    .unwrap_or(false)
-            }
-            (None, None) => {
-                // No score yet, don't terminate
-                false
-            }
-        }
+    fn install_inphase_limits(&self, solver_scope: &mut SolverScope<S, D, BestCb>) {
+        solver_scope.install_inphase_unimproved_time_limit(self.limit);
     }
 }

@@ -101,6 +101,7 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
             self.best_score = Some(current_score);
             self.last_best_elapsed = self.elapsed();
             self.best_solution_revision = Some(self.solution_revision);
+            self.restart_unimproved_window(self.total_step_count);
             self.report_best_solution();
         }
     }
@@ -131,6 +132,7 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
         self.best_score = Some(score);
         self.last_best_elapsed = self.elapsed();
         self.best_solution_revision = Some(self.solution_revision);
+        self.restart_unimproved_window(self.total_step_count);
         self.observe_phase_score(score, self.total_step_count);
     }
 
@@ -289,6 +291,7 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
     }
 
     pub fn should_terminate_construction(&mut self) -> bool {
+        self.restart_unimproved_window_for_construction();
         self.settle_pause_if_requested();
         if self.yielded_to_parent {
             return true;
@@ -355,6 +358,10 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
             return true;
         }
         if self.inphase_score_calc_count_limit_reached() {
+            self.mark_terminated_by_config();
+            return true;
+        }
+        if self.inphase_unimproved_limit_reached() {
             self.mark_terminated_by_config();
             return true;
         }

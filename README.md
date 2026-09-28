@@ -572,7 +572,10 @@ scalar and list construction. A configured solve publishes a best solution only
 after every mandatory list element, required assignment row, and non-optional
 scalar variable is assigned. If a limit is reached first, the solve ends as
 `Failed`; an incomplete construction state is never emitted as a best or
-completed solution.
+completed solution. Top-level `unimproved_step_count_limit` and
+`unimproved_seconds_spent_limit` measure search work since the best solution
+last improved: they stop local search between steps, while construction work
+restarts their window instead of being cut short.
 
 ## SolverManager API
 
