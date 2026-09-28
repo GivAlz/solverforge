@@ -192,6 +192,14 @@ where
             },
         ));
     }
+    if !config.child_phases.is_empty() {
+        return Err(extension_error(
+            path,
+            RuntimeCompileErrorKind::UnsupportedPartitionedChildPhases {
+                count: config.child_phases.len(),
+            },
+        ));
+    }
     Ok(CompiledRuntimePhase::Extension(
         CompiledRuntimeExtension::Partitioned {
             name: name.to_string(),

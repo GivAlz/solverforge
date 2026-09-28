@@ -670,6 +670,12 @@ Derives: `Debug, Clone, Default, Deserialize, Serialize`.
 | `child_phases` | `Vec<PhaseConfig>` | `[]` |
 | `termination` | `Option<TerminationConfig>` | `None` |
 
+`termination` is the phase-relative limit of the whole partitioned phase; its
+time limit is shared by every partition child. `child_phases` is not compiled
+by the solver runtime: a non-empty list is rejected when the runtime graph
+compiles, because partition child phases are built by the typed
+`partitioned_phase` builder.
+
 ### `CustomPhaseConfig`
 
 Derives: `Debug, Clone, Default, Deserialize, Serialize`.

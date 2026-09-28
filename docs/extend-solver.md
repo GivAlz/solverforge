@@ -136,12 +136,23 @@ partition boundaries, when merge cost dominates child solving, or when child
 solutions need global coordination to stay feasible. Typed search registration
 must name the partitioner explicitly; unregistered config fails at build time.
 
+The typed `partitioned_phase` builder owns the child phases that run inside each
+partition. A `[[phases.child_phases]]` list in solver configuration is rejected
+at build time instead of being ignored.
+
+A `[phases.termination]` block bounds the whole partitioned phase. Its time
+limit is one deadline shared by all partition children, its step limit and
+unimproved limits apply to each child on its own, and a best score limit is
+checked against the full solution before partitioning. When children stop
+because this phase limit is reached, their partitions are merged and the solver
+continues with the next phase.
+
 Partition children are internal compute scopes, not retained-job publication
 owners. They inherit cancellation, environment mode, remaining time limit,
 in-phase limits, and deterministic seeds, but pause checkpoints are emitted only
 by the parent scope while it still owns a full public solution. If a child yields
-to pause, cancel, or configured termination, partitioned search abandons the
-partial child results instead of merging them.
+to pause, cancel, or solver-level configured termination, partitioned search
+abandons the partial child results instead of merging them.
 
 ## Practical path
 

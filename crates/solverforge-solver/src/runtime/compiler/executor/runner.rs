@@ -107,6 +107,7 @@ where
     Extension {
         phase_index: usize,
         declaration: CandidateTracePhasePlan,
+        phase_termination: Option<solverforge_config::TerminationConfig>,
         outcome: RunnerPhaseOutcome,
     },
     DefaultRuntime {
@@ -253,9 +254,15 @@ where
             }
             (
                 PreparedRuntimePhase::Extension(extension),
-                RunnerPhase::Extension { outcome, .. },
+                RunnerPhase::Extension {
+                    phase_termination,
+                    outcome,
+                    ..
+                },
             ) => {
-                extension.solve(solver_scope);
+                solver_scope.with_phase_termination(phase_termination.as_ref(), |solver_scope| {
+                    extension.solve(solver_scope)
+                });
                 *outcome = RunnerPhaseOutcome::Executed;
                 publish_if_mandatory_complete(
                     execution,
@@ -359,6 +366,7 @@ where
                 phase_index,
                 declaration,
                 outcome,
+                ..
             } => phase_with_outcome(*phase_index, outcome.trace_label(), declaration.clone()),
             Self::DefaultRuntime {
                 phase_index,

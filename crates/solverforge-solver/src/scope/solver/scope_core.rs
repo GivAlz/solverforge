@@ -184,6 +184,8 @@ struct ScopedPhaseTermination<S: PlanningSolution> {
     start_step_count: u64,
     start_elapsed: Duration,
     time_limit: Option<Duration>,
+    // Absolute phase deadline inherited by a partition child scope.
+    deadline: Option<Instant>,
     step_count_limit: Option<u64>,
     best_score_limit: Option<S::Score>,
     unimproved_step_count_limit: Option<u64>,
@@ -233,6 +235,7 @@ where
             start_step_count: scope.total_step_count,
             start_elapsed: elapsed,
             time_limit,
+            deadline: None,
             step_count_limit,
             best_score_limit,
             unimproved_step_count_limit,
@@ -252,6 +255,9 @@ where
         let phase_steps = total_step_count.saturating_sub(self.start_step_count);
         let phase_elapsed = elapsed.saturating_sub(self.start_elapsed);
         self.time_limit.is_some_and(|limit| phase_elapsed >= limit)
+            || self
+                .deadline
+                .is_some_and(|deadline| Instant::now() >= deadline)
             || self.step_count_limit.is_some_and(|limit| phase_steps >= limit)
             || self
                 .best_score_limit
@@ -310,6 +316,7 @@ pub(crate) struct SolverScopeChildConfig<'t, S: PlanningSolution> {
     inphase_move_count_limit: Option<u64>,
     inphase_score_calc_count_limit: Option<u64>,
     inphase_best_score_limit: Option<S::Score>,
+    phase_termination: Option<ScopedPhaseTermination<S>>,
 }
 
 impl<'t, S: PlanningSolution> SolverScopeChildConfig<'t, S> {
@@ -334,6 +341,7 @@ impl<'t, S: PlanningSolution> SolverScopeChildConfig<'t, S> {
             scope.inphase_score_calc_count_limit = self.inphase_score_calc_count_limit;
         }
         scope.inphase_best_score_limit = self.inphase_best_score_limit;
+        scope.phase_termination = self.phase_termination.clone();
         scope
     }
 }
@@ -486,6 +494,10 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
             inphase_move_count_limit: self.inphase_move_count_limit,
             inphase_score_calc_count_limit: self.inphase_score_calc_count_limit,
             inphase_best_score_limit: self.inphase_best_score_limit,
+            phase_termination: self.phase_termination.as_ref().and_then(|termination| {
+                termination
+                    .for_partition_child(self.total_step_count, self.elapsed().unwrap_or_default())
+            }),
         }
     }
 
@@ -513,7 +525,7 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
         result
     }
 
-    fn phase_termination_reached(&self) -> bool {
+    pub(crate) fn phase_termination_reached(&self) -> bool {
         self.phase_termination.as_ref().is_some_and(|termination| {
             termination.is_reached(self.total_step_count, self.elapsed().unwrap_or_default())
         })

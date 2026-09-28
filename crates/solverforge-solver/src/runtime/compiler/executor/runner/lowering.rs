@@ -6,7 +6,7 @@
 
 use std::fmt::Debug;
 
-use solverforge_config::SolverConfig;
+use solverforge_config::{SolverConfig, TerminationConfig};
 use solverforge_core::domain::PlanningSolution;
 use solverforge_core::score::{ParseableScore, Score};
 
@@ -61,6 +61,7 @@ where
             Ok(RunnerPhase::Extension {
                 phase_index,
                 declaration: extension_plan(extension_trace_kind(extension)),
+                phase_termination: extension_termination(extension),
                 outcome: RunnerPhaseOutcome::Pending,
             })
         }
@@ -191,6 +192,13 @@ where
                 declaration,
             ))
         }
+    }
+}
+
+fn extension_termination(extension: &CompiledRuntimeExtension) -> Option<TerminationConfig> {
+    match extension {
+        CompiledRuntimeExtension::Custom { .. } => None,
+        CompiledRuntimeExtension::Partitioned { config, .. } => config.termination.clone(),
     }
 }
 

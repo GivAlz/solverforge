@@ -198,7 +198,8 @@ pub struct PartitionedSearchConfig {
     #[serde(default)]
     pub log_progress: bool,
 
-    // Optional child phase list to run inside each partition.
+    // Not compiled by the solver runtime: a non-empty list is rejected because
+    // partition child phases come from the typed `partitioned_phase` builder.
     #[serde(default)]
     pub child_phases: Vec<PhaseConfig>,
 
