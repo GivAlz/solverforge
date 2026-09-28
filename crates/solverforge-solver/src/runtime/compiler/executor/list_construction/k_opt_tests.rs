@@ -362,7 +362,6 @@ fn run_runtime(slot: Slot) -> (Vec<Vec<usize>>, CandidateTraceTelemetry) {
     scope.enable_candidate_trace(trace_header(), 128);
     execute_runtime_list_k_opt(
         &slot,
-        2,
         crate::scope::StepControlPolicy::ObserveConfigLimits,
         &mut scope,
     );
@@ -401,4 +400,19 @@ fn public_static_and_dynamic_k_opt_share_routes_trace_and_no_source_binding() {
         pull.source,
         crate::stats::CandidateTraceSource::ListKOptReconnection
     )));
+}
+
+#[test]
+#[should_panic(expected = "ListKOptPhase implements only route-local 2-opt (k = 2); got k = 3")]
+fn public_k_opt_facade_rejects_unimplemented_k() {
+    let _ = ListKOptPhase::<Plan, usize>::new(
+        3,
+        entity_count,
+        route_values,
+        replace_route,
+        depot,
+        distance,
+        None,
+        0,
+    );
 }

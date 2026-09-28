@@ -40,6 +40,6 @@ pub use list_construction::{
     ListCheapestInsertionPhase, ListConstructionPhase, ListConstructionPhaseBuilder,
     ListRegretInsertionPhase,
 };
-pub(crate) use list_k_opt::run_list_k_opt;
 pub use list_k_opt::ListKOptPhase;
+pub(crate) use list_k_opt::{run_list_k_opt, LIST_K_OPT_SUPPORTED_K};
 pub use local_search::LocalSearchPhaseFactory;

@@ -12,11 +12,13 @@ use crate::scope::{ProgressCallback, SolverScope, StepControlPolicy};
 
 /// Executes canonical route-local K-opt without an assignment source.
 ///
+/// The graph compiler has already rejected every `k` other than 2, so the
+/// configured value carries no execution choice here.
+///
 /// K-opt is intentionally separate from the list-source-backed construction
 /// helpers: it consumes only the route policy and current route contents.
 pub(crate) fn execute_runtime_list_k_opt<S, V, DM, IDM, D, ProgressCb>(
     slot: &RuntimeListSlot<S, V, DM, IDM>,
-    k: usize,
     control_policy: StepControlPolicy,
     solver_scope: &mut SolverScope<'_, S, D, ProgressCb>,
 ) where
@@ -27,5 +29,5 @@ pub(crate) fn execute_runtime_list_k_opt<S, V, DM, IDM, D, ProgressCb>(
     D: Director<S>,
     ProgressCb: ProgressCallback<S>,
 {
-    run_list_k_opt(slot, k, control_policy, solver_scope);
+    run_list_k_opt(slot, control_policy, solver_scope);
 }

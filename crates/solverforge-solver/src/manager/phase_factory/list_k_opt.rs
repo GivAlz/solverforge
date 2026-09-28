@@ -18,12 +18,14 @@ use crate::scope::{ProgressCallback, SolverScope, StepControlPolicy};
 
 mod kernel;
 
-pub(crate) use kernel::{run_list_k_opt, ListKOptAccess};
+pub(crate) use kernel::{run_list_k_opt, ListKOptAccess, LIST_K_OPT_SUPPORTED_K};
 
 /// Per-route k-opt polishing phase for list variable problems.
 ///
 /// Runs 2-opt local search on each entity's route to local optimum after
 /// construction. All domain knowledge is supplied via function pointers.
+/// Only `k = 2` is implemented; [`ListKOptPhase::new`] rejects every other
+/// value instead of running a silent no-op.
 ///
 /// # Algorithm (k=2, 2-opt)
 ///
@@ -101,7 +103,7 @@ where
 
     # Arguments
 
-    * `k` — k value; only k=2 (2-opt) is implemented; k>2 logs a warning and is a no-op
+    * `k` — k value; only k=2 (route-local 2-opt) is implemented
     * `entity_count` — number of entities (routes) in the solution
     * `get_route` — returns the route for entity at given index as element indices
     * `set_route` — replaces the route for entity at given index
@@ -110,6 +112,10 @@ where
     * `feasible_fn` — optional feasibility gate; receives solution, entity index, and
     candidate route after tentative reversal; return `false` to reject the move
     * `descriptor_index` — entity descriptor index for change notification
+
+    # Panics
+
+    Panics if `k != 2`. Use a local-search `KOptMoveSelector` for 3 <= k <= 5.
     */
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -122,6 +128,10 @@ where
         feasible_fn: Option<fn(&S, usize, &[usize]) -> bool>,
         descriptor_index: usize,
     ) -> Self {
+        assert!(
+            k == LIST_K_OPT_SUPPORTED_K,
+            "ListKOptPhase implements only route-local 2-opt (k = {LIST_K_OPT_SUPPORTED_K}); got k = {k}. Use a local-search KOptMoveSelector for 3 <= k <= 5"
+        );
         Self {
             k,
             entity_count,
@@ -220,13 +230,7 @@ where
     BestCb: ProgressCallback<S>,
 {
     fn solve(&mut self, solver_scope: &mut SolverScope<'_, S, D, BestCb>) {
-        let k = self.k;
-        run_list_k_opt(
-            self,
-            k,
-            StepControlPolicy::ObserveConfigLimits,
-            solver_scope,
-        );
+        run_list_k_opt(self, StepControlPolicy::ObserveConfigLimits, solver_scope);
     }
 
     fn phase_type_name(&self) -> &'static str {

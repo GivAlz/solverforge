@@ -11,6 +11,7 @@ use super::slots::{
     resolved_scalar_bindings,
 };
 use super::types::{RuntimeCapability, RuntimeCompileError, RuntimeCompileErrorKind};
+use crate::manager::LIST_K_OPT_SUPPORTED_K;
 
 pub(super) fn named_scalar_group<S, V, DM, IDM>(
     model: &RuntimeModel<S, V, DM, IDM>,
@@ -105,6 +106,15 @@ where
                 require_list_capability(&slots, RuntimeCapability::ListSavings, path)?;
             }
             ListConstructionKind::KOpt => {
+                if config.k != LIST_K_OPT_SUPPORTED_K {
+                    return Err(construction_shape(
+                        path,
+                        format!(
+                            "list_k_opt construction implements only route-local 2-opt (k = {LIST_K_OPT_SUPPORTED_K}); got k = {}. Use a local-search k_opt_move_selector for 3 <= k <= 5",
+                            config.k
+                        ),
+                    ));
+                }
                 require_list_capability(&slots, RuntimeCapability::ListRoute, path)?;
             }
             ListConstructionKind::RoundRobin

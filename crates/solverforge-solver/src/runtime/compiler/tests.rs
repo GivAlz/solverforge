@@ -240,13 +240,24 @@ fn compile_construction(
     super::CompiledRuntimeGraph<Plan, usize, Meter, Meter, NoDynamicExtensions>,
     super::RuntimeCompileError,
 > {
+    compile_construction_config(
+        model,
+        ConstructionHeuristicConfig {
+            construction_heuristic_type,
+            ..ConstructionHeuristicConfig::default()
+        },
+    )
+}
+
+fn compile_construction_config(
+    model: RuntimeModel<Plan, usize, Meter, Meter>,
+    construction: ConstructionHeuristicConfig,
+) -> Result<
+    super::CompiledRuntimeGraph<Plan, usize, Meter, Meter, NoDynamicExtensions>,
+    super::RuntimeCompileError,
+> {
     let config = SolverConfig {
-        phases: vec![PhaseConfig::ConstructionHeuristic(
-            ConstructionHeuristicConfig {
-                construction_heuristic_type,
-                ..ConstructionHeuristicConfig::default()
-            },
-        )],
+        phases: vec![PhaseConfig::ConstructionHeuristic(construction)],
         ..SolverConfig::default()
     };
     let context = SearchContext::new(descriptor(), model, config.random_seed);
@@ -328,4 +339,39 @@ fn clarke_wright_requires_savings_capability_before_execution() {
             ..
         }
     ));
+}
+
+fn list_k_opt(k: usize) -> ConstructionHeuristicConfig {
+    ConstructionHeuristicConfig {
+        construction_heuristic_type: ConstructionHeuristicType::ListKOpt,
+        k,
+        ..ConstructionHeuristicConfig::default()
+    }
+}
+
+#[test]
+fn list_k_opt_compiles_route_local_two_opt() {
+    let graph = compile_construction_config(savings_model(), list_k_opt(2))
+        .expect("declared route hooks compile list K-opt with k = 2");
+    let [CompiledRuntimePhase::Construction(CompiledConstruction::List { kind, .. })] =
+        graph.phases()
+    else {
+        panic!("list K-opt must lower to one explicit list construction node");
+    };
+    assert_eq!(*kind, ListConstructionKind::KOpt);
+}
+
+#[test]
+fn list_k_opt_rejects_unimplemented_k_before_execution() {
+    for k in [0, 1, 3, 4, 5] {
+        let error = compile_construction_config(savings_model(), list_k_opt(k))
+            .expect_err("list K-opt must not accept a k it would silently skip");
+        let RuntimeCompileErrorKind::ConstructionShape { message } = &error.kind else {
+            panic!("unexpected list K-opt compile error for k = {k}: {error:?}");
+        };
+        assert!(
+            message.contains(&format!("k = {k}")) && message.contains("k = 2"),
+            "list K-opt rejection must name the configured and supported k: {message}"
+        );
+    }
 }

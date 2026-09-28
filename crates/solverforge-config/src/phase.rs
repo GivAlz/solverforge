@@ -44,7 +44,8 @@ pub struct ConstructionHeuristicConfig {
     #[serde(flatten)]
     pub target: VariableTargetConfig,
 
-    // k for ListKOpt (default 2).
+    // k for ListKOpt (default 2). Only k = 2 is implemented; the runtime graph
+    // compiler rejects any other value.
     #[serde(default = "default_k")]
     pub k: usize,
 
