@@ -132,7 +132,7 @@ Derives: `Debug, Clone, Default, Deserialize, Serialize`.
 | `construction_heuristic_type` | `ConstructionHeuristicType` | `FirstFit` |
 | `construction_obligation` | `ConstructionObligation` | `PreserveUnassigned` |
 | `target` | `VariableTargetConfig` | empty target |
-| `k` | `usize` | `2` (for `ListKOpt`) |
+| `k` | `usize` | `2` (for `ListKOpt`; only `2` is implemented, other values are a runtime graph compilation error) |
 | `value_candidate_limit` | `Option<usize>` | `None` |
 | `group_name` | `Option<String>` | `None` |
 | `group_candidate_limit` | `Option<usize>` | `None` |
@@ -768,7 +768,7 @@ Derives: `Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize`.
 | `ListCheapestInsertion` | Specialized list-only score-minimizing insertion; validates the targeted list variable exists before phase build |
 | `ListRegretInsertion` | Specialized list-only highest-regret insertion; validates the targeted list variable exists before phase build |
 | `ListClarkeWright` | Specialized list-only greedy route merging by savings; validates `route_hooks` for assignment and `savings_hooks` for construction depot, distance, and feasibility before phase build |
-| `ListKOpt` | Specialized list-only per-route k-opt polishing (k=2 = 2-opt); validates `route_hooks` for route read/write, depot, and distance before phase build, and consumes route feasibility as the optional route-local commit gate |
+| `ListKOpt` | Specialized list-only per-route k-opt polishing; only `k = 2` (2-opt) is implemented and any other `k` fails runtime graph compilation instead of running as a no-op (use `KOptMoveSelector` in local search for 3 <= k <= 5); validates `route_hooks` for route read/write, depot, and distance before phase build, and consumes route feasibility as the optional route-local commit gate |
 
 When `group_name` is set, grouped scalar construction supports
 `FirstFit`, `FirstFitDecreasing`, `CheapestInsertion`, `WeakestFit`,

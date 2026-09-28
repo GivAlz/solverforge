@@ -31,15 +31,20 @@ pub(crate) trait ListKOptAccess<S> {
     fn route_feasible(&self, solution: &S, entity_index: usize, route: &[usize]) -> bool;
 }
 
-/// Runs the one canonical list K-opt kernel.
+/// The only `k` the route-local list K-opt construction phase implements.
 ///
-/// The public phase keeps its historic `k` contract: only `k = 2` is
-/// implemented, and every other value is a scored no-op.  The caller supplies
-/// a fully resolved access object; source binding is deliberately absent
-/// because K-opt never consumes an assignment source stream.
+/// Every entry point rejects other values before execution: the runtime graph
+/// compiler returns a compilation error and [`super::ListKOptPhase::new`]
+/// panics, so the kernel never silently skips a configured phase.
+pub(crate) const LIST_K_OPT_SUPPORTED_K: usize = 2;
+
+/// Runs the one canonical list K-opt kernel (route-local 2-opt).
+///
+/// The caller supplies a fully resolved access object; source binding is
+/// deliberately absent because K-opt never consumes an assignment source
+/// stream.
 pub(crate) fn run_list_k_opt<S, A, D, BestCb>(
     access: &A,
-    k: usize,
     control_policy: StepControlPolicy,
     solver_scope: &mut SolverScope<'_, S, D, BestCb>,
 ) where
@@ -49,13 +54,12 @@ pub(crate) fn run_list_k_opt<S, A, D, BestCb>(
     BestCb: ProgressCallback<S>,
 {
     run_construction_phase(solver_scope, 0, "List K-Opt", |phase_scope| {
-        run_list_k_opt_in_phase(access, k, control_policy, phase_scope);
+        run_list_k_opt_in_phase(access, control_policy, phase_scope);
     });
 }
 
 fn run_list_k_opt_in_phase<S, A, D, BestCb>(
     access: &A,
-    k: usize,
     control_policy: StepControlPolicy,
     phase_scope: &mut PhaseScope<'_, '_, S, D, BestCb>,
 ) where
@@ -64,16 +68,6 @@ fn run_list_k_opt_in_phase<S, A, D, BestCb>(
     D: Director<S>,
     BestCb: ProgressCallback<S>,
 {
-    if k != 2 {
-        tracing::warn!(
-            k,
-            "ListKOptPhase: only k=2 is implemented; skipping k-opt polishing"
-        );
-        phase_scope.calculate_score();
-        phase_scope.update_best_solution();
-        return;
-    }
-
     let n_entities = {
         let solution = phase_scope.score_director().working_solution();
         access.entity_count(solution)

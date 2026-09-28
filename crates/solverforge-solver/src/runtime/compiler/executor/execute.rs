@@ -198,7 +198,7 @@ where
                     if control_policy.should_terminate_construction(solver_scope) {
                         return Ok(false);
                     }
-                    execute_runtime_list_k_opt(slot, config.k, control_policy, solver_scope);
+                    execute_runtime_list_k_opt(slot, control_policy, solver_scope);
                 }
                 Ok(!slots.is_empty())
             },

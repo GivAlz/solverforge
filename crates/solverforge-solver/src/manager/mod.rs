@@ -24,7 +24,7 @@ mod mod_tests_integration;
 pub use builder::{SolverBuildError, SolverFactoryBuilder};
 pub(crate) use phase_factory::{
     run_cheapest, run_clarke_wright, run_list_k_opt, run_regret, run_round_robin,
-    PhaseCheapestInsertionObserver, ScoredListConstructionAccess,
+    PhaseCheapestInsertionObserver, ScoredListConstructionAccess, LIST_K_OPT_SUPPORTED_K,
 };
 #[cfg(test)]
 pub(crate) use phase_factory::{CheapestInsertionObserver, CheapestInsertionTrial};

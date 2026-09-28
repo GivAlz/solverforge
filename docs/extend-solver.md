@@ -51,7 +51,9 @@ ad hoc special cases:
 - `list_round_robin`, `list_cheapest_insertion`, `list_regret_insertion`,
   `list_clarke_wright`, and `list_k_opt` are list-only. The runtime validates
   the required route or savings hooks before phase build instead of failing deep
-  inside the algorithm.
+  inside the algorithm. `list_k_opt` implements only `k = 2` (route-local
+  2-opt); any other `k` is a compilation error, so use `k_opt_move_selector`
+  in a local-search phase for 3 <= k <= 5.
 - `group_name` selects a named `ScalarGroup` for grouped scalar construction.
   Candidate-backed groups apply arbitrary compound scalar candidates atomically.
   Assignment-backed groups generate stock nullable scalar candidates and feed
