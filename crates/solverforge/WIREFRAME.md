@@ -389,7 +389,7 @@ local-search selectors.
 | Function | Signature | Note |
 |----------|-----------|------|
 | `init_console` | `fn()` | No-op unless `console` feature enabled |
-| `load_solver_config` | `fn() -> SolverConfig` | Loads `solver.toml`, falling back to `SolverConfig::default()` |
+| `load_solver_config` | `fn() -> SolverConfig` | Loads `./solver.toml`; falls back to `SolverConfig::default()` only when the file is missing, and panics (failing the solve) when it is unreadable or invalid |
 
 ## Architectural Notes
 

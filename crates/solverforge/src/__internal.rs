@@ -1,4 +1,7 @@
-use solverforge_config::SolverConfig as FacadeSolverConfig;
+use std::io::ErrorKind;
+use std::path::Path;
+
+use solverforge_config::{ConfigError, SolverConfig as FacadeSolverConfig};
 
 // Initializes console output if the feature is enabled.
 #[inline]
@@ -7,9 +10,24 @@ pub fn init_console() {
     solverforge_console::init();
 }
 
-#[inline]
+// Loads the runtime `solver.toml` from the working directory. Only a missing
+// file falls back to `SolverConfig::default()`; an unreadable or invalid file
+// panics so the solve fails instead of silently running with defaults.
 pub fn load_solver_config() -> FacadeSolverConfig {
-    FacadeSolverConfig::load("solver.toml").unwrap_or_default()
+    let path = Path::new("solver.toml");
+    match load_solver_config_or_default(path) {
+        Ok(config) => config,
+        Err(error) => panic!("invalid {}: {error}", path.display()),
+    }
+}
+
+fn load_solver_config_or_default(path: &Path) -> Result<FacadeSolverConfig, ConfigError> {
+    match FacadeSolverConfig::load(path) {
+        Err(ConfigError::Io(error)) if error.kind() == ErrorKind::NotFound => {
+            Ok(FacadeSolverConfig::default())
+        }
+        result => result,
+    }
 }
 
 // Derive macros

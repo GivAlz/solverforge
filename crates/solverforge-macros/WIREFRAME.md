@@ -92,6 +92,10 @@ attribute for the derive to consume. The `config` flag embeds a
 `#[solverforge_config_path = "path"]` attribute for the derive to consume; the
 callback must have signature `fn(&Solution, SolverConfig) -> SolverConfig` and
 decorates the loaded `solver.toml` config instead of replacing it.
+Without `solver_toml = "path"`, the generated solve reads `./solver.toml` at
+solve time: a missing file yields `SolverConfig::default()`, while an
+unreadable or invalid file fails the job (the embedded `solver_toml` path
+likewise panics on an invalid file).
 
 ### `#[problem_fact]` / `#[problem_fact(serde)]`
 
@@ -196,7 +200,7 @@ arguments are compile errors.
 **Consumed attributes on struct:**
 - `#[shadow_variable_updates(...)]` — configures descriptor-aware shadow updates for the canonical solver path
 - `#[solverforge_constraints_path = "path"]` — path to constraint factory function
-- `#[solverforge_config_path = "path"]` — path to a config callback with signature `fn(&Solution, SolverConfig) -> SolverConfig`; called with the loaded `solver.toml` config (or defaults if the file is missing)
+- `#[solverforge_config_path = "path"]` — path to a config callback with signature `fn(&Solution, SolverConfig) -> SolverConfig`; called with the loaded `solver.toml` config (or defaults if the file is missing; an invalid file fails the solve before the callback runs)
 - `#[solverforge_solver_toml_path = "path"]` — generated bridge attribute for an explicit solver TOML source
 - `#[solverforge_search_path = "path"]` — generated bridge attribute for a typed custom-search function consumed by runtime phase support
 - `#[solverforge_conflict_repairs_path = "path"]` — generated bridge attribute for the current conflict-repair provider function

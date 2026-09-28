@@ -546,8 +546,13 @@ step_count_limit = 10000
 Or programmatically:
 
 ```rust
-let config = SolverConfig::load("solver.toml").unwrap_or_default();
+let config = SolverConfig::load("solver.toml")?;
 ```
+
+Macro-generated retained solves without `solver_toml = "..."` read
+`./solver.toml` from the working directory when the job starts. A missing file
+uses `SolverConfig::default()`; an unreadable or invalid file fails the job with
+the load error instead of falling back to defaults.
 
 For macro-generated retained solves, the solution module listed by
 `planning_model!` can use `config = "..."` to decorate the loaded `solver.toml`
