@@ -22,7 +22,9 @@ enum PartitionOutcome<S> {
     Complete(S),
     Pause,
     Cancelled,
-    Terminated,
+    // Configured termination stopped the child. Its best partition is still a
+    // complete partition solution and is merged like a finished one.
+    Terminated(S),
 }
 
 /// Partitioned search phase that solves partitions in parallel.
@@ -160,6 +162,7 @@ where
                 self.solve_partitions(partitions, thread_count, child_config, child_seeds);
 
             let mut solved_partitions = Vec::with_capacity(outcomes.len());
+            let mut terminated_by_config = false;
             for outcome in outcomes {
                 match outcome {
                     PartitionOutcome::Complete(partition) => solved_partitions.push(partition),
@@ -171,20 +174,30 @@ where
                         solver_scope.mark_cancelled();
                         return;
                     }
-                    PartitionOutcome::Terminated => {
-                        solver_scope.mark_terminated_by_config();
-                        return;
+                    PartitionOutcome::Terminated(partition) => {
+                        terminated_by_config = true;
+                        solved_partitions.push(partition);
                     }
                 }
             }
 
-            if solver_scope.should_terminate() {
+            // Only lifecycle control abandons solved partitions. Configured
+            // termination reached meanwhile still lets them merge.
+            solver_scope.pause_if_requested();
+            if solver_scope.yielded_to_parent() {
+                return;
+            }
+            if solver_scope.is_terminate_early() {
+                solver_scope.mark_cancelled();
                 return;
             }
 
             let merged = self.partitioner.merge(&solution, solved_partitions);
             solver_scope.replace_working_solution_and_reinitialize(merged);
             solver_scope.update_best_solution();
+            if terminated_by_config {
+                solver_scope.mark_terminated_by_config();
+            }
 
             if self.config.log_progress {
                 if let Some(score) = solver_scope.best_score() {
@@ -226,19 +239,20 @@ where
 
         // Create solver scope
         let mut solver_scope = child_config.build_scope(director, seed);
-        if solver_scope.should_terminate() {
-            return PartitionOutcome::Terminated;
-        }
-        solver_scope.initialize_working_solution_as_best();
+        if !solver_scope.should_terminate() {
+            solver_scope.initialize_working_solution_as_best();
 
-        // Create and run child phases
-        let mut phases = (self.phase_factory)();
-        phases.solve_all(&mut solver_scope);
+            // Create and run child phases
+            let mut phases = (self.phase_factory)();
+            phases.solve_all(&mut solver_scope);
+        }
 
         match solver_scope.pending_control() {
             PendingControl::PauseRequested => return PartitionOutcome::Pause,
             PendingControl::CancelRequested => return PartitionOutcome::Cancelled,
-            PendingControl::ConfigTerminationRequested => return PartitionOutcome::Terminated,
+            PendingControl::ConfigTerminationRequested => {
+                return PartitionOutcome::Terminated(solver_scope.take_best_or_working_solution())
+            }
             PendingControl::Continue => {}
         }
         if solver_scope.yielded_to_parent() {
@@ -246,7 +260,9 @@ where
         }
         match solver_scope.terminal_reason() {
             SolverTerminalReason::Cancelled => return PartitionOutcome::Cancelled,
-            SolverTerminalReason::TerminatedByConfig => return PartitionOutcome::Terminated,
+            SolverTerminalReason::TerminatedByConfig => {
+                return PartitionOutcome::Terminated(solver_scope.take_best_or_working_solution())
+            }
             SolverTerminalReason::Completed | SolverTerminalReason::Failed => {}
         }
 

@@ -139,9 +139,16 @@ must name the partitioner explicitly; unregistered config fails at build time.
 Partition children are internal compute scopes, not retained-job publication
 owners. They inherit cancellation, environment mode, remaining time limit,
 in-phase limits, and deterministic seeds, but pause checkpoints are emitted only
-by the parent scope while it still owns a full public solution. If a child yields
-to pause, cancel, or configured termination, partitioned search abandons the
-partial child results instead of merging them.
+by the parent scope while it still owns a full public solution.
+
+A child stopped by configured termination, such as the solver time limit, still
+returns its best partition: every partition is split from the parent's full
+working solution, so that best partition is a valid partition solution.
+Partitioned search merges those partitions, publishes the merged solution when
+it improves the best solution, and then ends the solve as terminated by
+configuration. If a child yields to pause or cancel, partitioned search abandons
+the partial child results instead of merging them; after a resume, it partitions
+the parent solution again.
 
 ## Practical path
 

@@ -582,7 +582,7 @@ fn partitioned_search_does_not_merge_cancelled_children() {
 }
 
 #[test]
-fn partitioned_search_does_not_merge_config_terminated_children() {
+fn partitioned_search_merges_config_terminated_children() {
     let solution = PartitionedLifecycleSolution {
         value: 1,
         shadow: 10,
@@ -612,8 +612,9 @@ fn partitioned_search_does_not_merge_config_terminated_children() {
 
     phase.solve(&mut solver_scope);
 
-    assert_eq!(merge_count.load(Ordering::SeqCst), 0);
-    assert_eq!(solver_scope.working_solution().value, 1);
+    assert_eq!(merge_count.load(Ordering::SeqCst), 1);
+    assert_eq!(solver_scope.working_solution().value, 99);
+    assert_eq!(solver_scope.best_score().copied(), Some(SoftScore::of(990)));
     assert_eq!(
         solver_scope.terminal_reason(),
         SolverTerminalReason::TerminatedByConfig
