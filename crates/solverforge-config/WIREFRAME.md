@@ -76,7 +76,8 @@ Top-level solver configuration. Derives: `Debug, Clone, Default, Deserialize, Se
 | `from_toml_str` | `fn(s: &str) -> Result<Self, ConfigError>` | Parses TOML string |
 | `from_yaml_file` | `fn(path: impl AsRef<Path>) -> Result<Self, ConfigError>` | Reads file, parses YAML |
 | `from_yaml_str` | `fn(s: &str) -> Result<Self, ConfigError>` | Parses YAML string |
-| `with_termination_seconds` | `fn(self, seconds: u64) -> Self` | Builder: sets seconds_spent_limit |
+| `with_termination_seconds` | `fn(self, seconds: u64) -> Self` | Builder: sets seconds_spent_limit to whole seconds |
+| `with_termination_time_limit` | `fn(self, limit: Duration) -> Self` | Builder: sets seconds_spent_limit, including sub-second budgets |
 | `with_random_seed` | `fn(self, seed: u64) -> Self` | Builder: sets random_seed |
 | `with_phase` | `fn(self, phase: PhaseConfig) -> Self` | Builder: appends phase |
 | `canonical_toml` | `fn(&self) -> String` | Complete deterministic serde representation for diagnostic provenance |
@@ -100,19 +101,24 @@ Derives: `Debug, Clone, Default, Deserialize, Serialize`.
 
 | Field | Type | Note |
 |-------|------|------|
-| `seconds_spent_limit` | `Option<u64>` | Max seconds |
-| `minutes_spent_limit` | `Option<u64>` | Max minutes |
+| `seconds_spent_limit` | `Option<f64>` | Max seconds; fractional allowed |
+| `minutes_spent_limit` | `Option<f64>` | Max minutes; fractional allowed |
 | `best_score_limit` | `Option<String>` | Target score as string (e.g., `"0hard/0soft"`) |
 | `step_count_limit` | `Option<u64>` | Max steps |
 | `unimproved_step_count_limit` | `Option<u64>` | Max unimproved steps |
-| `unimproved_seconds_spent_limit` | `Option<u64>` | Max seconds without improvement |
+| `unimproved_seconds_spent_limit` | `Option<f64>` | Max seconds without improvement; fractional allowed |
+
+The three time-limit fields accept integer or float values in TOML and YAML
+(`30`, `30.0`, and `1.5` all parse). Deserialization rejects negative, NaN,
+infinite, and `Duration`-overflowing values with a `ConfigError` naming the
+field. The same rules apply to top-level and phase-level `termination` tables.
 
 **Methods:**
 
 | Method | Signature | Note |
 |--------|-----------|------|
-| `time_limit` | `fn(&self) -> Option<Duration>` | Combines seconds + minutes × 60 |
-| `unimproved_time_limit` | `fn(&self) -> Option<Duration>` | Maps unimproved seconds to Duration |
+| `time_limit` | `fn(&self) -> Option<Duration>` | Combines seconds + minutes × 60; `None` when unset or zero. Panics on an invalid value assigned in code |
+| `unimproved_time_limit` | `fn(&self) -> Option<Duration>` | Maps unimproved seconds to Duration. Panics on an invalid value assigned in code |
 
 ### `DirectorConfig`
 

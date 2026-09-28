@@ -25,7 +25,7 @@ fn test_toml_parsing() {
     let config = SolverConfig::from_toml_str(toml).unwrap();
     assert_eq!(config.environment_mode, EnvironmentMode::Reproducible);
     assert_eq!(config.random_seed, Some(42));
-    assert_eq!(config.termination.unwrap().seconds_spent_limit, Some(30));
+    assert_eq!(config.termination.unwrap().seconds_spent_limit, Some(30.0));
     assert_eq!(config.phases.len(), 2);
 }
 
