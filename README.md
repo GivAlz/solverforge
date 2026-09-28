@@ -543,6 +543,9 @@ unimproved_seconds_spent_limit = 5
 step_count_limit = 10000
 ```
 
+Every configured limit applies: solving stops as soon as any one of them is
+reached.
+
 Or programmatically:
 
 ```rust
