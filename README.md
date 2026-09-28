@@ -567,6 +567,17 @@ fn solver_config_for_solution(solution: &Schedule, config: SolverConfig) -> Solv
 }
 ```
 
+Size limits so construction can finish: construction cost grows with instance
+size (for example, `list_cheapest_insertion` evaluates insertion positions for
+every remaining element), and local search only starts once construction is
+complete. For large instances, measure construction time on a representative
+instance first and set `seconds_spent_limit` to that time plus the
+local-search budget you want, or choose a cheaper construction heuristic such
+as `list_round_robin`. If construction does not finish in time, the solve fails
+as described below, and the error reports how far construction got, for
+example `list variable Route.visits ... has 224 unassigned element(s); 776 of
+1000 assigned`.
+
 Configured termination limits always remain binding, including during required
 scalar and list construction. A configured solve publishes a best solution only
 after every mandatory list element, required assignment row, and non-optional

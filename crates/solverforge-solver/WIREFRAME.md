@@ -29,7 +29,7 @@ src/
 ├── runtime.rs                           — List-variable metadata plus the sole immutable compiled runtime-graph entrypoint
 ├── runtime/compiler/                    — Immutable runtime-graph compiler, prepared runner, default policy, and executor kernels; every reached source-backed construction boundary validates stable element keys against the frozen declared stream before deciding whether work remains
 ├── runtime/compiler/executor/completion.rs — Structural mandatory-work gate and deferred best-solution publication
-├── runtime/compiler/executor/runner/failure.rs — Cold propagation of configured-runtime execution failures to the public run boundary
+├── runtime/compiler/executor/runner/failure.rs — Records configured-runtime execution failures (no unwinding) for the public run boundary to take and report as `Failed`
 ├── runtime/provider_cursor.rs           — One lazy compound-provider cursor; static Rust providers retain typed candidates/function pointers, while host callbacks alone use raw named edits and object-safe dispatch
 ├── model_support.rs                     — Hidden `PlanningModelSupport` bridge implemented by `planning_model!` for model-owned scalar hook attachment, scalar group attachment, model/solution validation, and shadow updates
 ├── pinning.rs                           — Internal descriptor-backed pin checks for solver-generated moves and entity mutations
@@ -448,7 +448,7 @@ Requires: `Send + Debug`.
 | `defers_initial_best_solution_publication` | `fn(&self) -> bool` (default `false`) |
 | `on_solver_terminal` | `fn(&mut self, solver_scope: &mut SolverScope<'_, S, D, ProgressCb>)` (default no-op) |
 
-All concrete phase types implement `Phase<S, D, ProgressCb>` for all `ProgressCb: ProgressCallback<S>`. Compiled runtime phases report whether their graph contains mandatory planning work through `defers_initial_best_solution_publication`; the solver then withholds public best-solution events until the compiled runtime proves that work complete. The solver invokes `on_solver_terminal` once for every configured top-level phase after the phase loop and before final statistics are taken, including a phase skipped by cancellation or configured termination. `PhaseSequence`, tuple, and runtime wrappers propagate both capabilities to their active children. Tuple implementations are via `tuple_impl.rs`.
+All concrete phase types implement `Phase<S, D, ProgressCb>` for all `ProgressCb: ProgressCallback<S>`. Compiled runtime phases report whether their graph contains mandatory planning work through `defers_initial_best_solution_publication`; the solver then withholds public best-solution events until the compiled runtime proves that work complete. The solver invokes `on_solver_terminal` once for every configured top-level phase after the phase loop and before final statistics are taken, including a phase skipped by cancellation or configured termination. `PhaseSequence`, tuple, and runtime wrappers propagate both capabilities to their active children. Tuple implementations are via `tuple_impl.rs`. `&mut P` implements `Phase` for every `P: Phase + ?Sized` by delegating each method, so a caller can run a phase in place and inspect it after the solver returns.
 
 ### `Termination<S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S> = ()>` — `termination/mod.rs`
 
@@ -1385,6 +1385,12 @@ Local search cannot start before this gate passes. Config or phase termination
 with unresolved mandatory work travels through `RuntimeBuildError::Execution`
 and the existing `Failed` manager lifecycle, without a `BestSolution`, completed
 snapshot, or partial paused snapshot.
+
+The compiled runtime records an unresolved-work failure, marks the solve
+`Failed`, and returns it through the configured entrypoint's `Err` path; it
+does not unwind. The message names the first incomplete variable and reports
+how far construction got, for example
+`has 224 unassigned element(s); 776 of 1000 assigned`.
 
 ## Termination Types
 

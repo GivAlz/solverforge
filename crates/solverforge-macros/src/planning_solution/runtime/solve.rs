@@ -57,13 +57,10 @@ pub(super) fn generate_runtime_solve_internal(
             qualified_candidate_trace_provenance: ::core::option::Option<
                 ::solverforge::QualifiedCandidateTraceRunProvenance,
             >,
-        ) -> Self {
+        ) -> ::solverforge::__internal::RuntimeBuildResult<Self> {
             ::solverforge::__internal::init_console();
 
-            match { #solve_expr } {
-                ::core::result::Result::Ok(solution) => solution,
-                ::core::result::Result::Err(error) => panic!("{error}"),
-            }
+            #solve_expr
         }
     }
 }

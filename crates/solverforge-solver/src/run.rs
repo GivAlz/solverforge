@@ -3,7 +3,6 @@
 use std::fmt;
 use std::hash::Hash;
 use std::marker::PhantomData;
-use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::time::Duration;
 
 #[cfg(test)]
@@ -18,9 +17,7 @@ use tracing::info;
 use crate::builder::{RuntimeExtensionRegistry, Search};
 use crate::manager::{SolverRuntime, SolverTerminalReason};
 use crate::phase::Phase;
-use crate::runtime::compiler::executor::{
-    take_runtime_execution_failure, CompiledRuntimePhaseRunner,
-};
+use crate::runtime::compiler::executor::{CompiledRuntimePhaseRunner, ExecutionFailureSource};
 use crate::runtime::compiler::{compile_runtime_graph, CompiledRuntimeExecutor, RuntimeGraphInput};
 use crate::runtime_build_error::{RuntimeBuildError, RuntimeBuildResult};
 use crate::scope::{ProgressCallback, SolverProgressKind, SolverProgressRef, SolverScope};
@@ -545,7 +542,10 @@ where
     S: PlanningSolution,
     S::Score: Score + ParseableScore,
     C: ConstraintSet<S, S::Score>,
-    Runner: Phase<S, ScoreDirector<S, C>, ChannelProgressCallback<S>> + Send + std::fmt::Debug,
+    Runner: Phase<S, ScoreDirector<S, C>, ChannelProgressCallback<S>>
+        + ExecutionFailureSource
+        + Send
+        + std::fmt::Debug,
     BuildRunner: FnOnce(&SolverConfig, &SolutionDescriptor) -> RuntimeBuildResult<Runner>,
 {
     log_scale(&solution);
@@ -562,14 +562,14 @@ where
 
     let callback = ChannelProgressCallback::new(runtime);
 
-    let runner = match build_runner(&config, &descriptor) {
+    let mut runner = match build_runner(&config, &descriptor) {
         Ok(runner) => runner,
         Err(error) => {
             runtime.emit_failed(error.to_string());
             return Err(error);
         }
     };
-    let mut solver = Solver::new((runner,))
+    let mut solver = Solver::new((&mut runner,))
         .with_config(config.clone())
         .with_candidate_trace_execution_policy(execution_policy)
         .with_termination(termination)
@@ -582,18 +582,11 @@ where
         solver = solver.with_time_limit(time_limit);
     }
 
-    let result = match catch_unwind(AssertUnwindSafe(|| {
-        solver.with_terminate(runtime.cancel_flag()).solve(director)
-    })) {
-        Ok(result) => result,
-        Err(payload) => match take_runtime_execution_failure(payload) {
-            Ok(error) => {
-                runtime.emit_failed(error.to_string());
-                return Err(error);
-            }
-            Err(payload) => resume_unwind(payload),
-        },
-    };
+    let result = solver.with_terminate(runtime.cancel_flag()).solve(director);
+    if let Some(error) = runner.take_execution_failure() {
+        runtime.emit_failed(error.to_string());
+        return Err(error);
+    }
 
     let crate::solver::SolveResult {
         solution,

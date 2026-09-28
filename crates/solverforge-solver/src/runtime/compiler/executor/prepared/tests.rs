@@ -1,5 +1,4 @@
 use std::any::TypeId;
-use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -18,8 +17,7 @@ use solverforge_scoring::ScoreDirector;
 use super::super::completion::publish_if_mandatory_complete;
 use super::super::{
     execute_prepared_construction, execute_prepared_default_construction,
-    take_runtime_execution_failure, CompiledRuntimePhaseRunner,
-    ResolvedConstructionExecutionOutcome,
+    CompiledRuntimePhaseRunner, ExecutionFailureSource, ResolvedConstructionExecutionOutcome,
 };
 use super::*;
 use crate::builder::search::CustomPhaseNode;
@@ -504,7 +502,7 @@ fn compiled_runtime_fails_incomplete_list_work_without_publishing_a_best_solutio
         ..SolverConfig::default()
     };
     let executor = executor(&config);
-    let runner =
+    let mut runner =
         CompiledRuntimePhaseRunner::try_new(&executor).expect("list runtime runner must prepare");
     let best_solution_events = Arc::new(AtomicUsize::new(0));
     let observed_events = Arc::clone(&best_solution_events);
@@ -513,7 +511,7 @@ fn compiled_runtime_fails_incomplete_list_work_without_publishing_a_best_solutio
         descriptor(),
         |plan, _| entity_count(plan),
     );
-    let solver = Solver::new((runner,))
+    let solver = Solver::new((&mut runner,))
         .with_config(config)
         .with_progress_callback(move |progress: SolverProgressRef<'_, Plan>| {
             if progress.kind == SolverProgressKind::BestSolution {
@@ -521,15 +519,21 @@ fn compiled_runtime_fails_incomplete_list_work_without_publishing_a_best_solutio
             }
         });
 
-    let payload = std::panic::catch_unwind(AssertUnwindSafe(|| solver.solve(director)))
-        .expect_err("incomplete mandatory list work must fail");
-    let error = take_runtime_execution_failure(payload)
+    let result = solver.solve(director);
+    assert_eq!(
+        result.terminal_reason,
+        crate::manager::SolverTerminalReason::Failed
+    );
+    let error = runner
+        .take_execution_failure()
         .expect("compiled-runtime incompleteness must use the typed failure channel");
     assert!(matches!(
         error,
         RuntimeBuildError::Execution { phase_index: 0, .. }
     ));
-    assert!(error.to_string().contains("8 unassigned element(s)"));
+    assert!(error
+        .to_string()
+        .contains("8 unassigned element(s); 0 of 8 assigned"));
     assert_eq!(best_solution_events.load(Ordering::SeqCst), 0);
 }
 

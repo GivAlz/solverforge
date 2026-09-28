@@ -18,7 +18,7 @@ use crate::builder::{CustomSearchPhase, RuntimeExtensionRegistry};
 use crate::heuristic::selector::nearby_list_change::CrossEntityDistanceMeter;
 use crate::phase::Phase;
 use crate::runtime::finalize_noop_construction;
-use crate::runtime_build_error::RuntimeBuildResult;
+use crate::runtime_build_error::{RuntimeBuildError, RuntimeBuildResult};
 use crate::scope::{ProgressCallback, SolverScope};
 use crate::stats::CandidateTracePhasePlan;
 
@@ -30,11 +30,11 @@ use super::{
     PreparedRuntimeExecution, PreparedRuntimePhase,
 };
 use crate::runtime::compiler::DefaultRuntimeBindings;
-use failure::{map_preparation_error, panic_execution_error, panic_runtime_execution_error};
+use failure::{execution_error, map_preparation_error};
 use local_search::RuntimeLocalSearch;
 use lowering::lower_runner_phase;
 
-pub(crate) use failure::take_runtime_execution_failure;
+pub(crate) use failure::ExecutionFailureSource;
 
 /// One retained per-solve executor. A public configured entrypoint creates it
 /// after graph compilation/preparation and hands it to the ordinary solver as
@@ -54,6 +54,7 @@ where
     mandatory_bindings: DefaultRuntimeBindings<S, V, DM, IDM>,
     mandatory_completion_published: bool,
     terminal_notified: bool,
+    failure: Option<RuntimeBuildError>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -170,6 +171,7 @@ where
             mandatory_bindings,
             mandatory_completion_published: false,
             terminal_notified: false,
+            failure: None,
         })
     }
 
@@ -182,7 +184,8 @@ where
         &mut self,
         index: usize,
         solver_scope: &mut SolverScope<'_, S, D, ProgressCb>,
-    ) where
+    ) -> RuntimeBuildResult<()>
+    where
         D: Director<S>,
         ProgressCb: ProgressCallback<S>,
     {
@@ -214,7 +217,7 @@ where
                     false,
                     solver_scope,
                 )
-                .unwrap_or_else(|error| panic_execution_error(error));
+                .map_err(execution_error)?;
                 if !construction_execution.ran() {
                     finalize_noop_construction(solver_scope);
                 }
@@ -225,8 +228,7 @@ where
                     mandatory_completion_published,
                     phase_index,
                     solver_scope,
-                )
-                .unwrap_or_else(|error| panic_runtime_execution_error(error));
+                )?;
             }
             (
                 PreparedRuntimePhase::LocalSearch(_),
@@ -242,9 +244,7 @@ where
                     mandatory_completion_published,
                     phase_index,
                     solver_scope,
-                )
-                .unwrap_or_else(|error| panic_runtime_execution_error(error))
-                {
+                )? {
                     local_search.solve(provider_resources, solver_scope);
                     *outcome = RunnerPhaseOutcome::Executed;
                 } else {
@@ -263,8 +263,7 @@ where
                     mandatory_completion_published,
                     phase_index,
                     solver_scope,
-                )
-                .unwrap_or_else(|error| panic_runtime_execution_error(error));
+                )?;
             }
             (
                 PreparedRuntimePhase::DefaultRuntime(default),
@@ -277,7 +276,7 @@ where
             ) => {
                 let record =
                     super::execute_prepared_default_construction(execution, default, solver_scope)
-                        .unwrap_or_else(|error| panic_execution_error(error));
+                        .map_err(execution_error)?;
                 let construction_outcome = record.outcome();
                 if !record.ran_child_phase {
                     finalize_noop_construction(solver_scope);
@@ -289,8 +288,7 @@ where
                     mandatory_completion_published,
                     phase_index,
                     solver_scope,
-                )
-                .unwrap_or_else(|error| panic_runtime_execution_error(error));
+                )?;
                 let local_search_ran = if mandatory_complete && !solver_scope.should_terminate() {
                     if let Some(local_search) = local_search {
                         local_search.solve(provider_resources, solver_scope);
@@ -311,6 +309,31 @@ where
             }
             _ => panic!("prepared runtime phase must retain its lowered runner variant"),
         }
+        Ok(())
+    }
+
+    fn try_solve<D, ProgressCb>(
+        &mut self,
+        solver_scope: &mut SolverScope<'_, S, D, ProgressCb>,
+    ) -> RuntimeBuildResult<()>
+    where
+        D: Director<S>,
+        ProgressCb: ProgressCallback<S>,
+    {
+        publish_if_mandatory_complete(
+            &mut self.execution,
+            &self.mandatory_bindings,
+            &mut self.mandatory_completion_published,
+            0,
+            solver_scope,
+        )?;
+        for index in 0..self.phases.len() {
+            if solver_scope.should_terminate() {
+                break;
+            }
+            self.solve_phase(index, solver_scope)?;
+        }
+        Ok(())
     }
 
     fn final_phase_plan(&self) -> CandidateTracePhasePlan {
@@ -418,19 +441,8 @@ where
     ProgressCb: ProgressCallback<S>,
 {
     fn solve(&mut self, solver_scope: &mut SolverScope<'_, S, D, ProgressCb>) {
-        publish_if_mandatory_complete(
-            &mut self.execution,
-            &self.mandatory_bindings,
-            &mut self.mandatory_completion_published,
-            0,
-            solver_scope,
-        )
-        .unwrap_or_else(|error| panic_runtime_execution_error(error));
-        for index in 0..self.phases.len() {
-            if solver_scope.should_terminate() {
-                break;
-            }
-            self.solve_phase(index, solver_scope);
+        if let Err(error) = self.try_solve(solver_scope) {
+            self.record_failure(error, solver_scope);
         }
     }
 
@@ -449,7 +461,7 @@ where
     }
 
     fn on_solver_terminal(&mut self, solver_scope: &mut SolverScope<'_, S, D, ProgressCb>) {
-        if self.terminal_notified {
+        if self.terminal_notified || self.failure.is_some() {
             return;
         }
         self.terminal_notified = true;
@@ -466,14 +478,15 @@ where
             .last()
             .map(RunnerPhase::phase_index)
             .unwrap_or(0);
-        require_mandatory_completion(
+        if let Err(error) = require_mandatory_completion(
             &mut self.execution,
             &self.mandatory_bindings,
             &mut self.mandatory_completion_published,
             phase_index,
             solver_scope,
-        )
-        .unwrap_or_else(|error| panic_runtime_execution_error(error));
+        ) {
+            self.record_failure(error, solver_scope);
+        }
     }
 
     fn candidate_trace_plan(&self) -> CandidateTracePhasePlan {

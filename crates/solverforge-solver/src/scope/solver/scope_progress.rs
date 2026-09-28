@@ -371,6 +371,12 @@ impl<'t, S: PlanningSolution, D: Director<S>, ProgressCb: ProgressCallback<S>>
             .get_or_insert(SolverTerminalReason::TerminatedByConfig);
     }
 
+    /// Records a reached execution failure. It supersedes a configured stop
+    /// that preceded it, because the failure is the solve's terminal outcome.
+    pub(crate) fn mark_failed(&mut self) {
+        self.terminal_reason = Some(SolverTerminalReason::Failed);
+    }
+
     pub(crate) fn install_inphase_best_score_limit(&mut self, target_score: S::Score) {
         let target_score = match self.inphase_best_score_limit {
             Some(existing) => existing.min(target_score),
