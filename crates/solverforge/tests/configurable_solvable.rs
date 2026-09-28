@@ -204,3 +204,81 @@ fn planning_solution_solver_toml_path_compiles_and_runs_for_list_only_solutions(
 
     MANAGER.delete(job_id).expect("delete completed job");
 }
+
+#[test]
+fn planning_solution_invalid_runtime_solver_toml_fails_the_job() {
+    static MANAGER: SolverManager<ConfigurableSolution> = SolverManager::new();
+
+    let _cwd_lock = cwd_test_lock().lock().expect("cwd lock should be acquired");
+    let _temp_solver_dir = TempSolverConfigDir::new(Some(
+        r#"
+[termination]
+seconds_spent_limit = 1.5
+
+[[phases]]
+type = "construction_heuristic"
+construction_heuristic_type = "first_fit"
+"#,
+    ));
+    LAST_CONFIG_SECONDS.store(0, Ordering::SeqCst);
+
+    let (job_id, mut receiver) = MANAGER
+        .solve(ConfigurableSolution {
+            entities: Vec::new(),
+            score: None,
+            time_limit_secs: 13,
+        })
+        .expect("job should start");
+
+    let error = match receiver.blocking_recv().expect("expected a terminal event") {
+        SolverEvent::Failed { error, .. } => error,
+        other => panic!("invalid solver.toml must fail the job, got: {other:?}"),
+    };
+    assert!(
+        error.contains("solver.toml") && error.contains("seconds_spent_limit"),
+        "failure should name the file and the invalid key, got: {error}"
+    );
+    assert_eq!(
+        LAST_CONFIG_SECONDS.load(Ordering::SeqCst),
+        0,
+        "the config callback must not run on a default fallback config"
+    );
+
+    MANAGER.delete(job_id).expect("delete failed job");
+}
+
+#[test]
+fn planning_solution_missing_runtime_solver_toml_uses_default_config() {
+    static MANAGER: SolverManager<ConfigurableSolution> = SolverManager::new();
+
+    let _cwd_lock = cwd_test_lock().lock().expect("cwd lock should be acquired");
+    let _temp_solver_dir = TempSolverConfigDir::new(None);
+
+    let (job_id, mut receiver) = MANAGER
+        .solve(ConfigurableSolution {
+            entities: Vec::new(),
+            score: None,
+            time_limit_secs: 1,
+        })
+        .expect("job should start");
+
+    let mut completed = false;
+
+    while let Some(event) = receiver.blocking_recv() {
+        match event {
+            SolverEvent::BestSolution { .. } => {}
+            SolverEvent::Completed { solution, .. } => {
+                assert_eq!(solution.score, Some(HardSoftScore::of(0, 0)));
+                completed = true;
+                break;
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    assert!(completed, "expected a completed event");
+    assert_eq!(LAST_BASE_RANDOM_SEED.load(Ordering::SeqCst), 0);
+    assert_eq!(LAST_BASE_PHASE_COUNT.load(Ordering::SeqCst), 0);
+
+    MANAGER.delete(job_id).expect("delete completed job");
+}
