@@ -18,6 +18,8 @@ use crate::builder::{
 use crate::heuristic::selector::nearby_list_change::CrossEntityDistanceMeter;
 use crate::scope::{ProgressCallback, SolverScope};
 
+mod partitioned;
+
 static EXTENSION_BUILD_CALLS: AtomicUsize = AtomicUsize::new(0);
 static EXTENSION_BUILD_LOCK: Mutex<()> = Mutex::new(());
 
@@ -91,7 +93,7 @@ fn partitioned(name: Option<&str>) -> PhaseConfig {
         partitioner: name.map(str::to_string),
         thread_count: MoveThreadCount::Count(3),
         log_progress: true,
-        child_phases: vec![custom("child_extension")],
+        child_phases: Vec::new(),
         termination: None,
     })
 }
@@ -139,7 +141,6 @@ fn typed_extensions_lower_names_without_invoking_builders_and_freeze_config() {
     assert_eq!(frozen.partitioner.as_deref(), Some("by_task"));
     assert_eq!(frozen.thread_count, MoveThreadCount::Count(3));
     assert!(frozen.log_progress);
-    assert_eq!(frozen.child_phases.len(), 1);
 
     let PhaseConfig::PartitionedSearch(live) = &mut config.phases[1] else {
         panic!("test configuration should retain its partitioned phase");

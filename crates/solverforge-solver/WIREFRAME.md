@@ -306,7 +306,9 @@ src/
 │   │   ├── partitioner.rs              — SolutionPartitioner trait, FunctionalPartitioner, ThreadCount
 │   │   ├── partitioner_tests.rs        — Tests
 │   │   ├── phase.rs                    — PartitionedSearchPhase<P, Part>
-│   │   └── phase_tests.rs              — Tests
+│   │   ├── phase_tests.rs              — Tests
+│   │   ├── tests.rs                    — Test module declarations
+│   │   └── tests/termination.rs        — Phase-relative termination of partition children
 │   ├── sequence.rs                      — PhaseSequence<P>
 │   └── localsearch/vnd/
 │       ├── mod.rs                       — Internal VND module declarations
@@ -368,6 +370,7 @@ src/
 ├── scope/
 │   ├── mod.rs                           — Re-exports
 │   ├── solver.rs                        — SolverScope<'t, S, D, ProgressCb = ()>, ProgressCallback trait, lifecycle-aware SolveResult, and included scope chunks
+│   ├── solver/partition_child.rs        — Phase-relative termination overlay derived for partition child scopes
 │   ├── solver/progress.rs               — SolverProgressRef, SolverProgressKind, SolverLifecycleState status, and ProgressCallback dispatch
 │   ├── solver/scope_core.rs             — Core SolverScope construction, shared phase progress pulse, runtime publication, lifecycle control, mutation, and child-scope helpers
 │   ├── solver/scope_progress.rs         — SolverScope score/best-solution/progress/stat reporting helpers
@@ -1222,10 +1225,17 @@ work counters start at that phase boundary; score targets and unimproved limits
 observe committed step scores at the same boundary; and the overlay is removed
 before the next top-level phase runs. It does not publish extra callbacks or
 snapshots. Mandatory omitted construction deliberately has no such overlay so
-its required-completion stream remains governed by lifecycle control. The
-overlay is local to the top-level runtime phase: `SolverScopeChildConfig` does
-not propagate it into partitioned child solvers, which continue to inherit the
-documented runtime control, remaining time, and in-phase limits only.
+its required-completion stream remains governed by lifecycle control. A
+configured `partitioned_search` phase installs the same overlay from its
+`[phases.termination]`, and `SolverScopeChildConfig` derives a child overlay
+for every partition scope: the remaining phase time becomes one absolute
+deadline shared by all children, while the remaining phase step limit and the
+unimproved limits bound each child's own trajectory. A best score limit is
+judged only against the parent's full solution at the phase boundary. When
+only this overlay stops the children, their partitions are complete and are
+merged before the phase ends. Configured `child_phases` are rejected at graph
+compilation: partition child phases come from the typed `partitioned_phase`
+builder.
 
 Assignment-owned scalar variables stay on the grouped scalar path. Default
 plain scalar neighborhoods and default conflict-repair neighborhoods exclude
@@ -1330,7 +1340,7 @@ Score bounders: `SoftScoreBounder`, `FixedOffsetBounder<S>`, `()` (no-op).
 
 ### Partitioned Search
 
-**`PartitionedSearchPhase<S, PD, Part, SDF, PF, CP>`** — Generic over partitioner, score director factory, phase factory, child phases. Child scopes inherit runtime control, environment mode, remaining time limit, in-phase limits, and deterministic child seeds, but retained-job publication stays on the parent scope. The runtime phase-relative termination overlay is not propagated into a child scope. Pause checkpoints are emitted only from the parent full-solution boundary; child pause/cancel/config termination outcomes prevent partition merge.
+**`PartitionedSearchPhase<S, PD, Part, SDF, PF, CP>`** — Generic over partitioner, score director factory, phase factory, child phases. Child scopes inherit runtime control, environment mode, remaining time limit, in-phase limits, and deterministic child seeds, but retained-job publication stays on the parent scope. A phase-relative termination overlay installed on the parent is derived into each child scope; reaching only that overlay completes the partition, so the phase still merges. Pause checkpoints are emitted only from the parent full-solution boundary; child pause/cancel/solver-level config termination outcomes prevent partition merge.
 
 **`FunctionalPartitioner<S, PF, MF>`** — Closure-based partitioner.
 

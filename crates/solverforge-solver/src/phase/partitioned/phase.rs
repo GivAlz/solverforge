@@ -178,7 +178,9 @@ where
                 }
             }
 
-            if solver_scope.should_terminate() {
+            // Reaching only this phase's own termination still merges the
+            // completed partitions; the overlay then ends the phase.
+            if solver_scope.should_terminate_beyond_phase() {
                 return;
             }
 
@@ -226,7 +228,7 @@ where
 
         // Create solver scope
         let mut solver_scope = child_config.build_scope(director, seed);
-        if solver_scope.should_terminate() {
+        if solver_scope.should_terminate_beyond_phase() {
             return PartitionOutcome::Terminated;
         }
         solver_scope.initialize_working_solution_as_best();
@@ -238,6 +240,10 @@ where
         match solver_scope.pending_control() {
             PendingControl::PauseRequested => return PartitionOutcome::Pause,
             PendingControl::CancelRequested => return PartitionOutcome::Cancelled,
+            // The inherited phase overlay ends only this phase; the partition
+            // is complete and merges like one that ran out of work.
+            PendingControl::ConfigTerminationRequested
+                if solver_scope.phase_termination_reached() => {}
             PendingControl::ConfigTerminationRequested => return PartitionOutcome::Terminated,
             PendingControl::Continue => {}
         }

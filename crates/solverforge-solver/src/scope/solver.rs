@@ -22,6 +22,7 @@ use crate::stats::{
     CandidateTraceSource, CandidateTraceTelemetry, SolverStats,
 };
 
+include!("solver/partition_child.rs");
 include!("solver/progress.rs");
 include!("solver/scope_core.rs");
 include!("solver/scope_progress.rs");

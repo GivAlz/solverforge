@@ -130,6 +130,9 @@ pub(crate) enum RuntimeCompileErrorKind {
     UnsupportedDynamicExtension {
         extension: RuntimeExtensionKind,
     },
+    UnsupportedPartitionedChildPhases {
+        count: usize,
+    },
 }
 
 impl fmt::Display for RuntimeCompileError {
@@ -200,6 +203,10 @@ impl fmt::Display for RuntimeCompileError {
             RuntimeCompileErrorKind::UnsupportedDynamicExtension { extension } => {
                 write!(f, "dynamic runtime cannot register {extension} extensions")
             }
+            RuntimeCompileErrorKind::UnsupportedPartitionedChildPhases { count } => write!(
+                f,
+                "partitioned_search does not support configured `child_phases` ({count} declared); partition child phases are built by the registered typed `partitioned_phase` builder"
+            ),
         }
     }
 }
