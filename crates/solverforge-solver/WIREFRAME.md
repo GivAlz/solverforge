@@ -306,7 +306,9 @@ src/
 │   │   ├── partitioner.rs              — SolutionPartitioner trait, FunctionalPartitioner, ThreadCount
 │   │   ├── partitioner_tests.rs        — Tests
 │   │   ├── phase.rs                    — PartitionedSearchPhase<P, Part>
-│   │   └── phase_tests.rs              — Tests
+│   │   ├── phase_tests.rs              — Tests
+│   │   ├── tests.rs                    — Test module declarations
+│   │   └── tests/telemetry.rs          — Partition child work in parent stats and step budgets
 │   ├── sequence.rs                      — PhaseSequence<P>
 │   └── localsearch/vnd/
 │       ├── mod.rs                       — Internal VND module declarations
@@ -371,6 +373,7 @@ src/
 │   ├── solver/progress.rs               — SolverProgressRef, SolverProgressKind, SolverLifecycleState status, and ProgressCallback dispatch
 │   ├── solver/scope_core.rs             — Core SolverScope construction, shared phase progress pulse, runtime publication, lifecycle control, mutation, and child-scope helpers
 │   ├── solver/scope_progress.rs         — SolverScope score/best-solution/progress/stat reporting helpers
+│   ├── solver/partition_work.rs         — Folds partition child stats and merged child steps into the parent scope
 │   ├── phase.rs                         — PhaseScope<'t, 'a, S, D, BestCb = ()>
 │   ├── step.rs                          — StepScope<'t, 'a, 'b, S, D, BestCb = ()>
 │   └── tests.rs                         — Tests
@@ -1570,6 +1573,19 @@ applied score improvement. `AppliedMoveTelemetry` is the bounded step-level
 record: step/candidate indexes, per-step generated/evaluated/accepted/ignored
 counts, before/after/delta scores, and hard-feasibility transition. They appear
 as `SolverTelemetry::move_telemetry` and `applied_move_trace`.
+
+Partitioned search adds the work of its child scopes to the parent's
+`SolverStats` once the children return, whatever their outcome: step, move,
+score-calculation, construction-slot, and conflict-repair counters,
+generation and evaluation time, and selector telemetry (by `selector_index`) and
+move telemetry (by `move_label`) are summed. Parallel children's stage times
+add up, so they can exceed wall-clock time; `elapsed` stays the parent's solve
+clock. A child's applied-move trace and `scalar_assignment_required_remaining`
+gauge describe only its partition and are not carried over. When the
+partitions are merged, child steps also advance the parent's total step count
+after the termination checks that decide the merge, so solver-level step, move,
+and score-calculation limits, which children already share while they run,
+leave only the remaining budget to later phases.
 
 ### Candidate Trace Diagnostics — `stats`
 

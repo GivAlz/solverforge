@@ -10,6 +10,8 @@ use super::{
 
 const APPLIED_MOVE_TRACE_LIMIT: usize = 8;
 
+mod partition;
+
 #[derive(Debug, Default)]
 pub struct SolverStats {
     start_time: Option<Instant>,

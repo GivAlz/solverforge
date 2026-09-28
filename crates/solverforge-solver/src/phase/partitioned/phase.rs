@@ -13,6 +13,7 @@ use crate::manager::SolverTerminalReason;
 use crate::phase::Phase;
 use crate::scope::ProgressCallback;
 use crate::scope::{PendingControl, SolverScope, SolverScopeChildConfig};
+use crate::stats::SolverStats;
 
 use super::child_phases::ChildPhases;
 use super::config::PartitionedSearchConfig;
@@ -156,8 +157,9 @@ where
                 .collect();
             let phase_budget = solver_scope.child_phase_budget();
             let child_config = solver_scope.child_config(Some(&phase_budget));
-            let outcomes =
+            let (outcomes, child_stats) =
                 self.solve_partitions(partitions, thread_count, child_config, child_seeds);
+            let child_steps = solver_scope.absorb_partition_children(child_stats);
 
             let mut solved_partitions = Vec::with_capacity(outcomes.len());
             for outcome in outcomes {
@@ -183,6 +185,7 @@ where
             }
 
             let merged = self.partitioner.merge(&solution, solved_partitions);
+            solver_scope.count_merged_partition_steps(child_steps);
             solver_scope.replace_working_solution_and_reinitialize(merged);
             solver_scope.update_best_solution();
 
@@ -214,12 +217,14 @@ where
     PF: Fn() -> CP + Send + Sync,
     CP: ChildPhases<S, PD>,
 {
-    // Solves a single partition and returns the solved solution.
+    // Solves a single partition and returns the solved solution. The child's
+    // work is moved into `child_stats` whatever the outcome.
     fn solve_partition<'t>(
         &self,
         partition: S,
         child_config: SolverScopeChildConfig<'t, S>,
         seed: u64,
+        child_stats: &mut SolverStats,
     ) -> PartitionOutcome<S> {
         // Create score director for this partition
         let director = (self.score_director_factory)(partition);
@@ -235,6 +240,9 @@ where
         let mut phases = (self.phase_factory)();
         phases.solve_all(&mut solver_scope);
 
+        // Outcome control below never reads these counters: a partition child
+        // has no in-phase count limits of its own, only the shared budget.
+        *child_stats = std::mem::take(solver_scope.stats_mut());
         match solver_scope.pending_control() {
             PendingControl::PauseRequested => return PartitionOutcome::Pause,
             PendingControl::CancelRequested => return PartitionOutcome::Cancelled,
@@ -259,15 +267,15 @@ where
         thread_count: usize,
         child_config: SolverScopeChildConfig<'t, S>,
         child_seeds: Vec<u64>,
-    ) -> Vec<PartitionOutcome<S>> {
+    ) -> (Vec<PartitionOutcome<S>>, Vec<SolverStats>) {
+        let solve = |(partition, seed)| {
+            let mut child_stats = SolverStats::default();
+            let outcome =
+                self.solve_partition(partition, child_config.clone(), seed, &mut child_stats);
+            (outcome, child_stats)
+        };
         if thread_count <= 1 || partitions.len() <= 1 {
-            return partitions
-                .into_iter()
-                .zip(child_seeds)
-                .map(|(partition, seed)| {
-                    self.solve_partition(partition, child_config.clone(), seed)
-                })
-                .collect();
+            return partitions.into_iter().zip(child_seeds).map(solve).unzip();
         }
 
         ThreadPoolBuilder::new()
@@ -278,10 +286,8 @@ where
                 partitions
                     .into_par_iter()
                     .zip(child_seeds.into_par_iter())
-                    .map(|(partition, seed)| {
-                        self.solve_partition(partition, child_config.clone(), seed)
-                    })
-                    .collect()
+                    .map(solve)
+                    .unzip()
             })
     }
 }

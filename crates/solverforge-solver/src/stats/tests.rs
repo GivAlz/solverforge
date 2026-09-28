@@ -187,6 +187,80 @@ fn solver_scalar_assignment_remaining_aggregates_by_group() {
 }
 
 #[test]
+fn absorbing_a_partition_child_sums_its_work_into_the_parent() {
+    let mut parent = SolverStats::default();
+    parent.start();
+    parent.record_step();
+    parent.record_selector_generated(0, 1, Duration::from_millis(1));
+    parent.record_selector_evaluated(0, Duration::from_millis(2));
+    parent.record_move_kind_evaluated("change", Ordering::Less);
+    parent.record_scalar_assignment_required_remaining("group", 4);
+
+    let mut child = SolverStats::default();
+    child.start();
+    child.record_step();
+    child.record_step();
+    child.record_selector_generated_with_label(0, "change_selector", 3, Duration::from_millis(3));
+    child.record_selector_evaluated(0, Duration::from_millis(4));
+    child.record_selector_accepted(0);
+    child.record_selector_applied(0);
+    child.record_selector_generated_with_label(1, "swap_selector", 1, Duration::from_millis(5));
+    child.record_selector_evaluated(1, Duration::from_millis(6));
+    child.record_move_kind_evaluated("change", Ordering::Greater);
+    child.record_move_kind_applied("change", 2.0);
+    child.record_move_kind_evaluated("swap", Ordering::Equal);
+    child.record_score_calculation();
+    child.record_construction_slot_assigned();
+    child.record_scalar_assignment_required_remaining("group", 0);
+    child.record_applied_move_trace(AppliedMoveTelemetry::default());
+
+    parent.absorb_partition_child(child);
+    let snapshot = parent.snapshot();
+
+    assert_eq!(snapshot.step_count, 3);
+    assert_eq!(snapshot.moves_generated, 5);
+    assert_eq!(snapshot.moves_evaluated, 3);
+    assert_eq!(snapshot.moves_accepted, 1);
+    assert_eq!(snapshot.moves_applied, 1);
+    assert_eq!(snapshot.score_calculations, 1);
+    assert_eq!(snapshot.construction_slots_assigned, 1);
+    assert_eq!(snapshot.generation_time, Duration::from_millis(9));
+    assert_eq!(snapshot.evaluation_time, Duration::from_millis(12));
+    // Partition-local state stays the parent's own.
+    assert_eq!(snapshot.scalar_assignment_required_remaining, 4);
+    assert!(snapshot.applied_move_trace.is_empty());
+
+    assert_eq!(snapshot.selector_telemetry.len(), 2);
+    assert_eq!(
+        snapshot.selector_telemetry[0].selector_label,
+        "change_selector"
+    );
+    assert_eq!(snapshot.selector_telemetry[0].moves_generated, 4);
+    assert_eq!(snapshot.selector_telemetry[0].moves_evaluated, 2);
+    assert_eq!(snapshot.selector_telemetry[0].moves_applied, 1);
+    assert_eq!(
+        snapshot.selector_telemetry[0].evaluation_time,
+        Duration::from_millis(6)
+    );
+    assert_eq!(
+        snapshot.selector_telemetry[1].selector_label,
+        "swap_selector"
+    );
+    assert_eq!(snapshot.selector_telemetry[1].moves_evaluated, 1);
+
+    assert_eq!(snapshot.move_telemetry.len(), 2);
+    let change = &snapshot.move_telemetry[0];
+    assert_eq!(change.move_label, "change");
+    assert_eq!(change.moves_evaluated, 2);
+    assert_eq!(change.moves_score_improving, 1);
+    assert_eq!(change.moves_score_worse, 1);
+    assert_eq!(change.moves_applied_improving, 1);
+    assert_eq!(change.applied_score_improvement, 2.0);
+    assert_eq!(snapshot.move_telemetry[1].move_label, "swap");
+    assert_eq!(snapshot.move_telemetry[1].moves_score_equal, 1);
+}
+
+#[test]
 fn unattributed_applied_moves_do_not_create_selector_zero_telemetry() {
     let mut stats = SolverStats::default();
     stats.record_generated_move(Duration::from_millis(1));

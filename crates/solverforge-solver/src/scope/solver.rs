@@ -25,3 +25,4 @@ use crate::stats::{
 include!("solver/progress.rs");
 include!("solver/scope_core.rs");
 include!("solver/scope_progress.rs");
+include!("solver/partition_work.rs");
