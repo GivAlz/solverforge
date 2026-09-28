@@ -121,11 +121,7 @@ impl<S: PlanningSolution> SolverRuntime<S> {
         best_score: Option<S::Score>,
         telemetry: SolverTelemetry,
     ) -> bool {
-        let mut guard = self.slot.pause_gate.lock().unwrap();
-        while self.slot.pause_requested.load(Ordering::Acquire) && !self.is_cancel_requested() {
-            guard = self.slot.pause_condvar.wait(guard).unwrap();
-        }
-        drop(guard);
+        self.slot.wait_while_paused();
         if self.is_cancel_requested() {
             return false;
         }
@@ -137,6 +133,7 @@ impl<S: PlanningSolution> SolverRuntime<S> {
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::Ordering;
+    use std::sync::mpsc;
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -185,8 +182,65 @@ mod tests {
             assert!(record.best_score.is_none());
         }
 
-        slot.pause_requested.store(false, Ordering::Release);
-        slot.pause_condvar.notify_all();
+        slot.release_pause();
         assert!(worker.join().expect("pause worker must resume"));
+    }
+
+    /// Drives a paused worker into the window between its pause-flag check
+    /// and its condvar wait, runs `signal` from another thread inside that
+    /// window, and reports whether the worker woke up.
+    fn worker_wakes_when_signalled_between_check_and_wait(
+        signal: fn(&JobSlot<PauseTestSolution>),
+    ) -> bool {
+        let slot = JobSlot::<PauseTestSolution>::new();
+        slot.pause_requested.store(true, Ordering::Release);
+        let (woke_tx, woke_rx) = mpsc::channel();
+
+        thread::scope(|scope| {
+            let slot = &slot;
+            scope.spawn(move || {
+                let mut signalled = false;
+                slot.wait_while_paused_observed(|| {
+                    if std::mem::replace(&mut signalled, true) {
+                        return;
+                    }
+                    let (done_tx, done_rx) = mpsc::channel();
+                    scope.spawn(move || {
+                        signal(slot);
+                        let _ = done_tx.send(());
+                    });
+                    // Give the signaller the chance to finish before this
+                    // worker parks. A signaller that respects `pause_gate`
+                    // cannot finish here and completes once the wait below
+                    // releases the gate.
+                    let _ = done_rx.recv_timeout(Duration::from_millis(100));
+                });
+                let _ = woke_tx.send(());
+            });
+
+            let woke = woke_rx.recv_timeout(Duration::from_secs(2)).is_ok();
+            if !woke {
+                // Unpark the stranded worker so the scope can join it.
+                let _gate = slot.pause_gate.lock().unwrap();
+                slot.pause_condvar.notify_all();
+            }
+            woke
+        })
+    }
+
+    #[test]
+    fn resume_between_pause_check_and_wait_wakes_worker() {
+        assert!(
+            worker_wakes_when_signalled_between_check_and_wait(JobSlot::release_pause),
+            "resume signal was lost while the worker was entering its pause wait"
+        );
+    }
+
+    #[test]
+    fn cancel_between_pause_check_and_wait_wakes_worker() {
+        assert!(
+            worker_wakes_when_signalled_between_check_and_wait(JobSlot::request_cancel),
+            "cancel signal was lost while the worker was entering its pause wait"
+        );
     }
 }
